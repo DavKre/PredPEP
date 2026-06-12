@@ -1,0 +1,319 @@
+[
+    {
+        "Id": "f5c5f41ebc726d6f06100473d46094518fd830a925b0e186e53906acd98d1216",
+        "Created": "2026-03-23T15:31:08.422606654Z",
+        "Path": "/opt/nvidia/nvidia_entrypoint.sh",
+        "Args": [
+            "/bin/bash",
+            "-c",
+            "mamba run -n predPEP gunicorn -w 1 -b 0.0.0.0:6363 --worker-class=gevent --timeout 0 --capture-output --log-level debug --access-logfile - --error-logfile - predPEP:predPEP"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 393348,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-04-15T19:40:18.408900616Z",
+            "FinishedAt": "2026-04-15T19:40:10.364950369Z",
+            "Health": {
+                "Status": "unhealthy",
+                "FailingStreak": 19488,
+                "Log": [
+                    {
+                        "Start": "2026-04-22T16:16:30.567581632+02:00",
+                        "End": "2026-04-22T16:16:30.638158968+02:00",
+                        "ExitCode": 1,
+                        "Output": "/bin/sh: 1: curl: not found\n"
+                    },
+                    {
+                        "Start": "2026-04-22T16:17:00.639316979+02:00",
+                        "End": "2026-04-22T16:17:00.692546124+02:00",
+                        "ExitCode": 1,
+                        "Output": "/bin/sh: 1: curl: not found\n"
+                    },
+                    {
+                        "Start": "2026-04-22T16:17:30.69388016+02:00",
+                        "End": "2026-04-22T16:17:30.740296785+02:00",
+                        "ExitCode": 1,
+                        "Output": "/bin/sh: 1: curl: not found\n"
+                    },
+                    {
+                        "Start": "2026-04-22T16:18:00.74198031+02:00",
+                        "End": "2026-04-22T16:18:00.792537021+02:00",
+                        "ExitCode": 1,
+                        "Output": "/bin/sh: 1: curl: not found\n"
+                    },
+                    {
+                        "Start": "2026-04-22T16:18:30.793954139+02:00",
+                        "End": "2026-04-22T16:18:30.848740803+02:00",
+                        "ExitCode": 1,
+                        "Output": "/bin/sh: 1: curl: not found\n"
+                    }
+                ]
+            }
+        },
+        "Image": "sha256:82448c46a72b09fd499cf6dfa1e3155db061be95123dfc5f10bea9e0c61bf66a",
+        "ResolvConfPath": "/var/lib/docker/containers/f5c5f41ebc726d6f06100473d46094518fd830a925b0e186e53906acd98d1216/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/f5c5f41ebc726d6f06100473d46094518fd830a925b0e186e53906acd98d1216/hostname",
+        "HostsPath": "/var/lib/docker/containers/f5c5f41ebc726d6f06100473d46094518fd830a925b0e186e53906acd98d1216/hosts",
+        "LogPath": "/var/lib/docker/containers/f5c5f41ebc726d6f06100473d46094518fd830a925b0e186e53906acd98d1216/f5c5f41ebc726d6f06100473d46094518fd830a925b0e186e53906acd98d1216-json.log",
+        "Name": "/predpep_app",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "ExecIDs": [
+            "90179d4739813b6eb8d32230fcebe300779193cfeff8e01e43f6e6e50ad0924f"
+        ],
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "bridge",
+            "PortBindings": {
+                "6363/tcp": [
+                    {
+                        "HostIp": "",
+                        "HostPort": "6363"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "unless-stopped",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                65,
+                214
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": [],
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "nvidia",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": [
+                {
+                    "Driver": "",
+                    "Count": -1,
+                    "DeviceIDs": null,
+                    "Capabilities": [
+                        [
+                            "gpu"
+                        ]
+                    ],
+                    "Options": {}
+                }
+            ],
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": [],
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "GraphDriver": {
+            "Data": {
+                "ID": "f5c5f41ebc726d6f06100473d46094518fd830a925b0e186e53906acd98d1216",
+                "LowerDir": "/var/lib/docker/overlay2/dd6b4d2c66ba786af55be91cb26503d603c9ddc013b5c124e4624b8a408a1e1b-init/diff:/var/lib/docker/overlay2/9a85dd8931ad3fd179ad614348a435b40271899e48bba5cc7100860caeb81424/diff:/var/lib/docker/overlay2/5f92fb1cdd38ab4c2306bbe7c1610a64c0e99f02e29237f2f32fac9343a90560/diff:/var/lib/docker/overlay2/8596fea08a5cff20c9db995de632b5750ea645848eacb39368c469ab9d21d527/diff:/var/lib/docker/overlay2/914bd54686f081041df1a2933a7a0ac01c18109e7dac282bf03e08d94eb6db1c/diff:/var/lib/docker/overlay2/47084953e769bf48dfbd169afb0fee6848fbdbeb1bd2cd920ef0f2db7dd1de83/diff:/var/lib/docker/overlay2/59bf6b61725b2eae6dcd20331bca69e320c46595ef1f0bac6888325312bce20d/diff:/var/lib/docker/overlay2/e6fc3e992709551f829f6e5e69627dbc86daacb58f5742bc7322e2a6acb18c5b/diff:/var/lib/docker/overlay2/50202af05fc3e649393c53b79e5595b5937deade25101bffa1bbb46c43dd42d6/diff:/var/lib/docker/overlay2/4p8winbpnwyay152acydz4awi/diff:/var/lib/docker/overlay2/ebe6880f155f012317c3902647710db7f224d3f0beabe26d383b04075387788d/diff:/var/lib/docker/overlay2/9qqq3aiq8tef1qfuo0xqwl0le/diff:/var/lib/docker/overlay2/q7urxaj5msrzx3b3mgz69uhj7/diff:/var/lib/docker/overlay2/68qdxpeqj71xjs1gwohdj9rd7/diff:/var/lib/docker/overlay2/7ny6ixp0vkia6mp084slvgb7s/diff:/var/lib/docker/overlay2/q0943v6rgux9yo8f9yznmxjul/diff:/var/lib/docker/overlay2/jtfg6xvihrwoij6x9fpaw78dj/diff:/var/lib/docker/overlay2/e6b4ba0146b9bd915578dd1ba7cd32f83660432e2337e2d84b7f351335d11e06/diff:/var/lib/docker/overlay2/ac6cf88bc6cf8938ad3cb82af163cb489e310ac860b30802092cb08b467f9c44/diff:/var/lib/docker/overlay2/c00ee93f2be7e2b2993bf6b1143f118c6df1bf698cc3f3515ff10ac9bce2b10c/diff:/var/lib/docker/overlay2/c5661a5cea78cc4ec2e42e2a71474a8beb824b155dd0d7bbae60cf0799f82a98/diff:/var/lib/docker/overlay2/0da65cfcdbebda031ce710e7dee0455eb603c92524fcaf2bb5995213a5cc5c52/diff:/var/lib/docker/overlay2/6e6ecb761e395ce7fe2bc99497f67a7265da75339f0913db9baa71731de7e3b0/diff:/var/lib/docker/overlay2/9f5bba0facdb1ab8716b846a73a8b3d70265c55fff7da1fd915421463e3a27b3/diff:/var/lib/docker/overlay2/7d731f1475422745cb30eedfd98608baf43821cfd9a59bbc0b279864e4ca85b3/diff:/var/lib/docker/overlay2/75cb31e6dc57386d7020775b010e66f5e5e2c93a5667e5b981405c6733c75801/diff:/var/lib/docker/overlay2/9599fb45ccd5a1022687c6bfc3b3d2265e71e5ecc06aeec977b6fdb59909debc/diff:/var/lib/docker/overlay2/50c388cfc6196d473c609ae39acbdeef98ee5e9f3f5c7ce03fdf83c3c9592500/diff",
+                "MergedDir": "/var/lib/docker/overlay2/dd6b4d2c66ba786af55be91cb26503d603c9ddc013b5c124e4624b8a408a1e1b/merged",
+                "UpperDir": "/var/lib/docker/overlay2/dd6b4d2c66ba786af55be91cb26503d603c9ddc013b5c124e4624b8a408a1e1b/diff",
+                "WorkDir": "/var/lib/docker/overlay2/dd6b4d2c66ba786af55be91cb26503d603c9ddc013b5c124e4624b8a408a1e1b/work"
+            },
+            "Name": "overlay2"
+        },
+        "Mounts": [],
+        "Config": {
+            "Hostname": "f5c5f41ebc72",
+            "Domainname": "",
+            "User": "root",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "ExposedPorts": {
+                "6363/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/home/spacepep/miniforge3/condabin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "NVARCH=x86_64",
+                "NVIDIA_REQUIRE_CUDA=cuda>=12.4 brand=tesla,driver>=470,driver<471 brand=unknown,driver>=470,driver<471 brand=nvidia,driver>=470,driver<471 brand=nvidiartx,driver>=470,driver<471 brand=geforce,driver>=470,driver<471 brand=geforcertx,driver>=470,driver<471 brand=quadro,driver>=470,driver<471 brand=quadrortx,driver>=470,driver<471 brand=titan,driver>=470,driver<471 brand=titanrtx,driver>=470,driver<471 brand=tesla,driver>=525,driver<526 brand=unknown,driver>=525,driver<526 brand=nvidia,driver>=525,driver<526 brand=nvidiartx,driver>=525,driver<526 brand=geforce,driver>=525,driver<526 brand=geforcertx,driver>=525,driver<526 brand=quadro,driver>=525,driver<526 brand=quadrortx,driver>=525,driver<526 brand=titan,driver>=525,driver<526 brand=titanrtx,driver>=525,driver<526 brand=tesla,driver>=535,driver<536 brand=unknown,driver>=535,driver<536 brand=nvidia,driver>=535,driver<536 brand=nvidiartx,driver>=535,driver<536 brand=geforce,driver>=535,driver<536 brand=geforcertx,driver>=535,driver<536 brand=quadro,driver>=535,driver<536 brand=quadrortx,driver>=535,driver<536 brand=titan,driver>=535,driver<536 brand=titanrtx,driver>=535,driver<536",
+                "NV_CUDA_CUDART_VERSION=12.4.99-1",
+                "NV_CUDA_COMPAT_PACKAGE=cuda-compat-12-4",
+                "CUDA_VERSION=12.4.0",
+                "LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64",
+                "NVIDIA_VISIBLE_DEVICES=all",
+                "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
+                "NV_CUDA_LIB_VERSION=12.4.0-1",
+                "NV_NVTX_VERSION=12.4.99-1",
+                "NV_LIBNPP_VERSION=12.2.5.2-1",
+                "NV_LIBNPP_PACKAGE=libnpp-12-4=12.2.5.2-1",
+                "NV_LIBCUSPARSE_VERSION=12.3.0.142-1",
+                "NV_LIBCUBLAS_PACKAGE_NAME=libcublas-12-4",
+                "NV_LIBCUBLAS_VERSION=12.4.2.65-1",
+                "NV_LIBCUBLAS_PACKAGE=libcublas-12-4=12.4.2.65-1",
+                "NV_LIBNCCL_PACKAGE_NAME=libnccl2",
+                "NV_LIBNCCL_PACKAGE_VERSION=2.20.5-1",
+                "NCCL_VERSION=2.20.5-1",
+                "NV_LIBNCCL_PACKAGE=libnccl2=2.20.5-1+cuda12.4",
+                "NVIDIA_PRODUCT_NAME=CUDA",
+                "NV_CUDA_CUDART_DEV_VERSION=12.4.99-1",
+                "NV_NVML_DEV_VERSION=12.4.99-1",
+                "NV_LIBCUSPARSE_DEV_VERSION=12.3.0.142-1",
+                "NV_LIBNPP_DEV_VERSION=12.2.5.2-1",
+                "NV_LIBNPP_DEV_PACKAGE=libnpp-dev-12-4=12.2.5.2-1",
+                "NV_LIBCUBLAS_DEV_VERSION=12.4.2.65-1",
+                "NV_LIBCUBLAS_DEV_PACKAGE_NAME=libcublas-dev-12-4",
+                "NV_LIBCUBLAS_DEV_PACKAGE=libcublas-dev-12-4=12.4.2.65-1",
+                "NV_CUDA_NSIGHT_COMPUTE_VERSION=12.4.0-1",
+                "NV_CUDA_NSIGHT_COMPUTE_DEV_PACKAGE=cuda-nsight-compute-12-4=12.4.0-1",
+                "NV_NVPROF_VERSION=12.4.99-1",
+                "NV_NVPROF_DEV_PACKAGE=cuda-nvprof-12-4=12.4.99-1",
+                "NV_LIBNCCL_DEV_PACKAGE_NAME=libnccl-dev",
+                "NV_LIBNCCL_DEV_PACKAGE_VERSION=2.20.5-1",
+                "NV_LIBNCCL_DEV_PACKAGE=libnccl-dev=2.20.5-1+cuda12.4",
+                "LIBRARY_PATH=/usr/local/cuda/lib64/stubs",
+                "USER_NAME=spacepep",
+                "USER_UID=1003",
+                "USER_GID=1003",
+                "HOME=/home/spacepep",
+                "FLASK_APP=predPEP.py"
+            ],
+            "Cmd": [
+                "/bin/bash",
+                "-c",
+                "mamba run -n predPEP gunicorn -w 1 -b 0.0.0.0:6363 --worker-class=gevent --timeout 0 --capture-output --log-level debug --access-logfile - --error-logfile - predPEP:predPEP"
+            ],
+            "Healthcheck": {
+                "Test": [
+                    "CMD-SHELL",
+                    "curl --fail http://localhost:6363/ || exit 1"
+                ],
+                "Interval": 30000000000,
+                "Timeout": 5000000000,
+                "StartPeriod": 10000000000,
+                "Retries": 3
+            },
+            "Image": "predpep:v2",
+            "Volumes": null,
+            "WorkingDir": "/opt/sp-predPEP",
+            "Entrypoint": [
+                "/opt/nvidia/nvidia_entrypoint.sh"
+            ],
+            "Labels": {
+                "maintainer": "NVIDIA CORPORATION <cudatools@nvidia.com>",
+                "org.opencontainers.image.ref.name": "ubuntu",
+                "org.opencontainers.image.version": "22.04"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "691f50913e37c5a1ccca5bc168131b80b3da72e765dafd2997f1ae67b9ec39b4",
+            "SandboxKey": "/var/run/docker/netns/691f50913e37",
+            "Ports": {
+                "6363/tcp": [
+                    {
+                        "HostIp": "0.0.0.0",
+                        "HostPort": "6363"
+                    },
+                    {
+                        "HostIp": "::",
+                        "HostPort": "6363"
+                    }
+                ]
+            },
+            "Networks": {
+                "bridge": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "536205eaab745c5418b36cdd27110fdeaa54555d9f37e32e43257a8614f1cda8",
+                    "EndpointID": "158005447d9adb0982d5924ed189fdf7ae5144b72a2d520737006e069ef990aa",
+                    "Gateway": "172.17.0.1",
+                    "IPAddress": "172.17.0.8",
+                    "MacAddress": "4a:15:0e:71:71:02",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        }
+    }
+]

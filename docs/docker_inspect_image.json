@@ -1,0 +1,133 @@
+[
+    {
+        "Id": "sha256:82448c46a72b09fd499cf6dfa1e3155db061be95123dfc5f10bea9e0c61bf66a",
+        "RepoTags": [
+            "predpep:v2"
+        ],
+        "RepoDigests": [],
+        "Comment": "buildkit.dockerfile.v0",
+        "Created": "2026-03-09T16:35:30.501948293Z",
+        "Config": {
+            "User": "root",
+            "ExposedPorts": {
+                "6363/tcp": {}
+            },
+            "Env": [
+                "PATH=/home/spacepep/miniforge3/condabin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "NVARCH=x86_64",
+                "NVIDIA_REQUIRE_CUDA=cuda>=12.4 brand=tesla,driver>=470,driver<471 brand=unknown,driver>=470,driver<471 brand=nvidia,driver>=470,driver<471 brand=nvidiartx,driver>=470,driver<471 brand=geforce,driver>=470,driver<471 brand=geforcertx,driver>=470,driver<471 brand=quadro,driver>=470,driver<471 brand=quadrortx,driver>=470,driver<471 brand=titan,driver>=470,driver<471 brand=titanrtx,driver>=470,driver<471 brand=tesla,driver>=525,driver<526 brand=unknown,driver>=525,driver<526 brand=nvidia,driver>=525,driver<526 brand=nvidiartx,driver>=525,driver<526 brand=geforce,driver>=525,driver<526 brand=geforcertx,driver>=525,driver<526 brand=quadro,driver>=525,driver<526 brand=quadrortx,driver>=525,driver<526 brand=titan,driver>=525,driver<526 brand=titanrtx,driver>=525,driver<526 brand=tesla,driver>=535,driver<536 brand=unknown,driver>=535,driver<536 brand=nvidia,driver>=535,driver<536 brand=nvidiartx,driver>=535,driver<536 brand=geforce,driver>=535,driver<536 brand=geforcertx,driver>=535,driver<536 brand=quadro,driver>=535,driver<536 brand=quadrortx,driver>=535,driver<536 brand=titan,driver>=535,driver<536 brand=titanrtx,driver>=535,driver<536",
+                "NV_CUDA_CUDART_VERSION=12.4.99-1",
+                "NV_CUDA_COMPAT_PACKAGE=cuda-compat-12-4",
+                "CUDA_VERSION=12.4.0",
+                "LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64",
+                "NVIDIA_VISIBLE_DEVICES=all",
+                "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
+                "NV_CUDA_LIB_VERSION=12.4.0-1",
+                "NV_NVTX_VERSION=12.4.99-1",
+                "NV_LIBNPP_VERSION=12.2.5.2-1",
+                "NV_LIBNPP_PACKAGE=libnpp-12-4=12.2.5.2-1",
+                "NV_LIBCUSPARSE_VERSION=12.3.0.142-1",
+                "NV_LIBCUBLAS_PACKAGE_NAME=libcublas-12-4",
+                "NV_LIBCUBLAS_VERSION=12.4.2.65-1",
+                "NV_LIBCUBLAS_PACKAGE=libcublas-12-4=12.4.2.65-1",
+                "NV_LIBNCCL_PACKAGE_NAME=libnccl2",
+                "NV_LIBNCCL_PACKAGE_VERSION=2.20.5-1",
+                "NCCL_VERSION=2.20.5-1",
+                "NV_LIBNCCL_PACKAGE=libnccl2=2.20.5-1+cuda12.4",
+                "NVIDIA_PRODUCT_NAME=CUDA",
+                "NV_CUDA_CUDART_DEV_VERSION=12.4.99-1",
+                "NV_NVML_DEV_VERSION=12.4.99-1",
+                "NV_LIBCUSPARSE_DEV_VERSION=12.3.0.142-1",
+                "NV_LIBNPP_DEV_VERSION=12.2.5.2-1",
+                "NV_LIBNPP_DEV_PACKAGE=libnpp-dev-12-4=12.2.5.2-1",
+                "NV_LIBCUBLAS_DEV_VERSION=12.4.2.65-1",
+                "NV_LIBCUBLAS_DEV_PACKAGE_NAME=libcublas-dev-12-4",
+                "NV_LIBCUBLAS_DEV_PACKAGE=libcublas-dev-12-4=12.4.2.65-1",
+                "NV_CUDA_NSIGHT_COMPUTE_VERSION=12.4.0-1",
+                "NV_CUDA_NSIGHT_COMPUTE_DEV_PACKAGE=cuda-nsight-compute-12-4=12.4.0-1",
+                "NV_NVPROF_VERSION=12.4.99-1",
+                "NV_NVPROF_DEV_PACKAGE=cuda-nvprof-12-4=12.4.99-1",
+                "NV_LIBNCCL_DEV_PACKAGE_NAME=libnccl-dev",
+                "NV_LIBNCCL_DEV_PACKAGE_VERSION=2.20.5-1",
+                "NV_LIBNCCL_DEV_PACKAGE=libnccl-dev=2.20.5-1+cuda12.4",
+                "LIBRARY_PATH=/usr/local/cuda/lib64/stubs",
+                "USER_NAME=spacepep",
+                "USER_UID=1003",
+                "USER_GID=1003",
+                "HOME=/home/spacepep",
+                "FLASK_APP=predPEP.py"
+            ],
+            "Entrypoint": [
+                "/opt/nvidia/nvidia_entrypoint.sh"
+            ],
+            "Cmd": [
+                "/bin/bash",
+                "-c",
+                "mamba run -n predPEP gunicorn -w 1 -b 0.0.0.0:6363 --worker-class=gevent --timeout 0 --capture-output --log-level debug --access-logfile - --error-logfile - predPEP:predPEP"
+            ],
+            "WorkingDir": "/opt/sp-predPEP",
+            "Labels": {
+                "maintainer": "NVIDIA CORPORATION <cudatools@nvidia.com>",
+                "org.opencontainers.image.ref.name": "ubuntu",
+                "org.opencontainers.image.version": "22.04"
+            },
+            "Healthcheck": {
+                "Test": [
+                    "CMD-SHELL",
+                    "curl --fail http://localhost:6363/ || exit 1"
+                ],
+                "Interval": 30000000000,
+                "Timeout": 5000000000,
+                "StartPeriod": 10000000000,
+                "Retries": 3
+            }
+        },
+        "Architecture": "amd64",
+        "Os": "linux",
+        "Size": 82488918514,
+        "GraphDriver": {
+            "Data": {
+                "LowerDir": "/var/lib/docker/overlay2/5f92fb1cdd38ab4c2306bbe7c1610a64c0e99f02e29237f2f32fac9343a90560/diff:/var/lib/docker/overlay2/8596fea08a5cff20c9db995de632b5750ea645848eacb39368c469ab9d21d527/diff:/var/lib/docker/overlay2/914bd54686f081041df1a2933a7a0ac01c18109e7dac282bf03e08d94eb6db1c/diff:/var/lib/docker/overlay2/47084953e769bf48dfbd169afb0fee6848fbdbeb1bd2cd920ef0f2db7dd1de83/diff:/var/lib/docker/overlay2/59bf6b61725b2eae6dcd20331bca69e320c46595ef1f0bac6888325312bce20d/diff:/var/lib/docker/overlay2/e6fc3e992709551f829f6e5e69627dbc86daacb58f5742bc7322e2a6acb18c5b/diff:/var/lib/docker/overlay2/50202af05fc3e649393c53b79e5595b5937deade25101bffa1bbb46c43dd42d6/diff:/var/lib/docker/overlay2/4p8winbpnwyay152acydz4awi/diff:/var/lib/docker/overlay2/ebe6880f155f012317c3902647710db7f224d3f0beabe26d383b04075387788d/diff:/var/lib/docker/overlay2/9qqq3aiq8tef1qfuo0xqwl0le/diff:/var/lib/docker/overlay2/q7urxaj5msrzx3b3mgz69uhj7/diff:/var/lib/docker/overlay2/68qdxpeqj71xjs1gwohdj9rd7/diff:/var/lib/docker/overlay2/7ny6ixp0vkia6mp084slvgb7s/diff:/var/lib/docker/overlay2/q0943v6rgux9yo8f9yznmxjul/diff:/var/lib/docker/overlay2/jtfg6xvihrwoij6x9fpaw78dj/diff:/var/lib/docker/overlay2/e6b4ba0146b9bd915578dd1ba7cd32f83660432e2337e2d84b7f351335d11e06/diff:/var/lib/docker/overlay2/ac6cf88bc6cf8938ad3cb82af163cb489e310ac860b30802092cb08b467f9c44/diff:/var/lib/docker/overlay2/c00ee93f2be7e2b2993bf6b1143f118c6df1bf698cc3f3515ff10ac9bce2b10c/diff:/var/lib/docker/overlay2/c5661a5cea78cc4ec2e42e2a71474a8beb824b155dd0d7bbae60cf0799f82a98/diff:/var/lib/docker/overlay2/0da65cfcdbebda031ce710e7dee0455eb603c92524fcaf2bb5995213a5cc5c52/diff:/var/lib/docker/overlay2/6e6ecb761e395ce7fe2bc99497f67a7265da75339f0913db9baa71731de7e3b0/diff:/var/lib/docker/overlay2/9f5bba0facdb1ab8716b846a73a8b3d70265c55fff7da1fd915421463e3a27b3/diff:/var/lib/docker/overlay2/7d731f1475422745cb30eedfd98608baf43821cfd9a59bbc0b279864e4ca85b3/diff:/var/lib/docker/overlay2/75cb31e6dc57386d7020775b010e66f5e5e2c93a5667e5b981405c6733c75801/diff:/var/lib/docker/overlay2/9599fb45ccd5a1022687c6bfc3b3d2265e71e5ecc06aeec977b6fdb59909debc/diff:/var/lib/docker/overlay2/50c388cfc6196d473c609ae39acbdeef98ee5e9f3f5c7ce03fdf83c3c9592500/diff",
+                "MergedDir": "/var/lib/docker/overlay2/9a85dd8931ad3fd179ad614348a435b40271899e48bba5cc7100860caeb81424/merged",
+                "UpperDir": "/var/lib/docker/overlay2/9a85dd8931ad3fd179ad614348a435b40271899e48bba5cc7100860caeb81424/diff",
+                "WorkDir": "/var/lib/docker/overlay2/9a85dd8931ad3fd179ad614348a435b40271899e48bba5cc7100860caeb81424/work"
+            },
+            "Name": "overlay2"
+        },
+        "RootFS": {
+            "Type": "layers",
+            "Layers": [
+                "sha256:5498e8c22f6996f25ef193ee58617d5b37e2a96decf22e72de13c3b34e147591",
+                "sha256:4cd4079525948900a02a5734090afd1f3e046fc940dc882c55efcaee0a252dd0",
+                "sha256:022bf74291b27404b223ba9ee16a7f3fb067253df9c65e23dfb3339800b28dfa",
+                "sha256:eeb5315df33c9e700b3b8b8a3cdd1cf11e13c9dd44bfd946e340573478303349",
+                "sha256:e942261d196e5e686398e2326c033119112f910191143b0497f13f78c377fa03",
+                "sha256:421c5b38d6e056b3eee631bc65e1d2b24cee88b8f858457ec2ed1604b68cdbbb",
+                "sha256:520e0f301880ab5ca0650a44703c86d75428b6ece6c3190b8ecd850e55372f60",
+                "sha256:700fe921ad1f9a93e69a6a4faec3406f3f51e0f4ab4e9b732a9141261d941a4f",
+                "sha256:b0dfaf1ca5c560107272f1e55220f7cef07d30d44ebac56c4cf8c45308538b91",
+                "sha256:4e356886a6484f425853fd040dd03bafe8007527bdc73cae3d21583bf96b7407",
+                "sha256:bbdba4451161c7000e6cdd700a49e1af18acabdbc27e85ebacdd23bc0f14fe3f",
+                "sha256:c23757578df6b701d4c285321cfe8c96f70a7c9fa620c9a4022c65d479c77636",
+                "sha256:6d51e278dcec5bd9bd2a16e794a5aec95b6143ac787f296429c033bfc95c98a8",
+                "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+                "sha256:e78272b9f29b6d3b293f643f441608fec4bae304af8666e4d3196cd6be0473ba",
+                "sha256:a1ce119b556015878cce140488b088dea461822bb951a50634c559eaa0784952",
+                "sha256:0a4f7d4fc3cb06081baeda6089a3f3463b73f625fe160f153c80288c8eb5fe3d",
+                "sha256:7c976c0a0c7a6d4271fb8f188e4e791584dc130dca3d4f6700a8d2dd4f332d30",
+                "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+                "sha256:ec798c3c40768f81391091b0ddef7067ac1de31b30908448b0ab95d72588c524",
+                "sha256:675445d607782c0e67238051327c1388762e261006db1cd5d9055fd165af9d97",
+                "sha256:5854d154b74950e8db0689e15c6194be5e586efbea79c24faa6acb99ac6126ec",
+                "sha256:d08f6f00f6485d588fbd68defe857dcacbfe3b71b6f780e74c31827dc29bffe6",
+                "sha256:f44ebb4d04887235d0208a0c3ed67a752f4408d079acb34a6742ba462603132e",
+                "sha256:aafc67cef02d5f8df5c1485e71296077fc40bed688a796ed967fb85ad4b0c8ef",
+                "sha256:a1cc96f5ef9ef49897a09268a0e0621e4ed964538b0548416001ccb98cba56c8",
+                "sha256:4d963add8b9cc6bbdf8cba78c9ce09e543c49d3b4bce1bb5f90c0d6f50c75cb4"
+            ]
+        },
+        "Metadata": {
+            "LastTagTime": "2026-03-09T17:43:48.530090728+01:00"
+        }
+    }
+]

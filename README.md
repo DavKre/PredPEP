@@ -5,7 +5,7 @@ Headless Flask + gunicorn JSON backend for peptide design, running Rosetta + Fol
 ## Prerequisites
 
 - Docker 23+ (the Dockerfile uses `RUN --mount=type=bind`, which requires BuildKit — default in 23+)
-- ~50 GB free disk under Docker's storage root (final image size is printed at the end of `./scripts/build.sh`)
+- Building needs ~50 GB free transiently (Rosetta is extracted in full, then pruned in the same layer); the **resulting image is ~8 GB**, so machines that only *run* a pre-built image need ~10 GB. Final size is printed at the end of `./scripts/build.sh`.
 - Port 6363 free on the host
 
 CPU-only — no GPU, NVIDIA driver, or nvidia-container-toolkit required. Runs on any x86-64 Linux host with Docker.

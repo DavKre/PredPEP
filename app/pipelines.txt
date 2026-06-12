@@ -1,0 +1,43 @@
+Peptide Drug Development (predPEP focus)
+
+    pepspec.static.linuxgccrelease: Evaluates peptide binding specificity. / Bewertet die Spezifitaet der Peptidbindung.
+
+    pepspec_anchor_dock.static.linuxgccrelease: Initial docking of a peptide "anchor" residue. / Initiales Docking eines Peptid-„Anker“-Restes.
+
+    FlexPepDocking.static.linuxgccrelease: High-resolution refinement of peptide-protein complexes. / Hochaufloesende Verfeinerung von Peptid-Protein-Komplexen.
+
+    BuildPeptide.static.linuxgccrelease: Generates 3D coordinates from a peptide sequence. / Erzeugt 3D-Koordinaten aus einer Peptidsequenz.
+
+    simple_cycpep_predict.static.linuxgccrelease: Useful if you are working on cyclic peptides. / Nuetzlich, wenn Sie mit zyklischen Peptiden arbeiten.
+
+2. Small Molecule Discovery
+
+    ligand_dock.static.linuxgccrelease: The primary engine for protein-ligand docking. / Die Haupt-Engine fuer Protein-Ligand-Docking.
+
+    ligand_rpkmin.static.linuxgccrelease: Fast repacking and minimization of ligand interfaces. / Schnelles Repacking und Minimieren von Liganden-Schnittstellen.
+
+    gen_lig_grids.static.linuxgccrelease: Generates potential grids for faster docking. / Erzeugt Potenzialgitter fuer schnelleres Docking.
+
+    DARC.static.linuxgccrelease: Used for shape-based virtual screening. / Wird fuer formbasiertes virtuelles Screening verwendet.
+
+3. Antibody Engineering
+
+    antibody.static.linuxgccrelease: General antibody structure prediction and modeling. / Allgemeine Vorhersage und Modellierung von Antikoerperstrukturen.
+
+    antibody_designer.static.linuxgccrelease: De novo design of CDR loops. / De-novo-Design von CDR-Loops.
+
+    snugdock.static.linuxgccrelease: Refines the orientation of the antibody-antigen interface. / Verfeinert die Orientierung der Antikoerper-Antigen-Schnittstelle.
+
+    antibody_graft.static.linuxgccrelease: Used for CDR grafting/humanization. / Wird fuer CDR-Grafting/Humanisierung verwendet.
+
+4. Analysis & Foundation
+
+    InterfaceAnalyzer.static.linuxgccrelease: Calculates ΔG, buried surface area (BSA), and packing. / Berechnet ΔG, die vergrabene Oberflaeche (BSA) und das Packing.
+
+    relax.static.linuxgccrelease: Essential for preparing structures and removing clashes. / Essentiell zur Vorbereitung von Strukturen und zum Entfernen von Clashes.
+
+    cartesian_ddg.static.linuxgccrelease: Predicts change in stability upon mutation. / Sagt die Stabilitaetsaenderung nach einer Mutation voraus.
+
+    rosetta_scripts.static.linuxgccrelease: The "Swiss Army Knife" for running custom XML protocols. / Das „Schweizer Taschenmesser“ fuer die Ausfuehrung benutzerdefinierter XML-Protokolle.
+
+    score_jd2.static.linuxgccrelease: Standard scoring of PDB files. / Standard-Scoring von PDB-Dateien.

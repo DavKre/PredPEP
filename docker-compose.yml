@@ -1,0 +1,17 @@
+# Equivalent to run.sh: predpep_app, detached, GPU, restart=unless-stopped.
+# For code-iteration bind-mounts, use run-dev.sh instead.
+
+services:
+  predpep:
+    image: predpep:local
+    container_name: predpep_app
+    ports:
+      - "6363:6363"
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

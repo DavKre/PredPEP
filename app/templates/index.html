@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Space Peptides - predPEP Peptide Design</title>
+    <script src="https://cdn.jsdelivr.net/npm/ngl@2.0.0-dev.38/dist/ngl.js"></script> 
+    <script src="https://cdn.plot.ly/plotly-2.30.0.min.js" charset="utf-8"></script>
+
+    <style>
+        /* BASE LAYOUT */
+        body { font-family: sans-serif; margin: 2rem; background-color: #f4f4f4; }
+        
+        #header-banner {
+            max-width: 1400px;
+            margin: 0 auto 2rem auto;
+            padding: 1.5rem 2rem;
+            background-color: #007bff;
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        #header-banner h1 { color: white; margin-bottom: 0.2rem; text-align: center; }
+        #header-banner h3 { font-weight: normal; margin-top: 0; text-align: center; }
+        
+        .container { 
+            max-width: 1400px; 
+            margin: auto; 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 2rem; 
+        }
+        
+        .content-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+            padding: 2rem; 
+            min-height: 700px; 
+            box-sizing: border-box;
+        }
+
+        .sidebar { flex: 1 1 350px; }
+        .main-content { flex: 2 1 700px; }
+
+        h1 { text-align: left; color: #333; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+        
+        input[type="file"], select, button, input[type="text"], input[type="email"] { 
+            width: 100%; 
+            padding: 0.75rem; 
+            border-radius: 4px; 
+            border: 1px solid #ccc; 
+            box-sizing: border-box; 
+        }
+
+        .form-select {
+            background-color: white;
+            cursor: pointer;
+        }
+
+        button { background-color: #007bff; color: white; border: none; cursor: pointer; transition: background-color 0.2s; }
+        button:hover:not(:disabled) { background-color: #0056b3; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        
+        #status { margin-top: 1.5rem; text-align: center; padding: 1rem; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9;}
+        #loading { display: none; color: #007bff; font-weight: bold; padding: 0.5rem; }
+        
+        /* TAB STYLES */
+        .tab-buttons { margin-bottom: 0; display: flex; }
+        .tab-buttons button { 
+            flex: 1; 
+            margin: 0 2px; 
+            padding: 10px; 
+            background-color: #e9ecef; 
+            color: #495057; 
+            border: 1px solid #dee2e6; 
+            border-bottom: none; 
+            transition: background-color 0.1s;
+            font-size: 0.85rem;
+        }
+        .tab-buttons button.active { 
+            background-color: white; 
+            color: #007bff; 
+            border-color: #dee2e6; 
+            border-bottom: 1px solid white; 
+            font-weight: bold; 
+        }
+        .tab-content { border: 1px solid #dee2e6; border-top: none; padding: 1rem; min-height: 500px; }
+        .hidden { display: none !important; }
+
+        /* VIEWERS & PLOTS */
+        #pdb-viewer { width: 100%; height: 350px; border: 1px solid #ccc; background-color: #f8f8f8; margin-bottom: 1rem; }
+        #ngl-viewer { width: 100%; height: 500px; border: 1px solid #ccc; background-color: #f8f8f8; position: relative; }
+        
+        .results-table-container { margin-top: 1rem; max-height: 400px; overflow-y: auto; }
+        .results-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9rem; }
+        .results-table th, .results-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .results-table th { background-color: #f2f2f2; position: sticky; top: 0; }
+        
+        .plot-container { margin-top: 1rem; width: 100%; height: 500px; border: 1px solid #ccc; }
+        .plot-half-width { width: 48%; float: left; margin-right: 2%; } 
+        .clearfix::after { content: ""; clear: both; display: table; }
+        .text-muted { color: #6c757d; font-size: 0.9rem; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+
+<div id="header-banner">
+    <h1>Space Peptides</h1>
+    <h3>predPEP Peptide Design Submission</h3>
+</div>
+
+<div class="container">
+    <div class="sidebar content-card">
+        <form id="uploadForm">
+            <div class="form-group">
+                <label for="file1">Select the Complex PDB File</label>
+                <input type="file" id="file1" name="file1" accept=".pdb" required>
+            </div>
+            <div class="form-group">
+                <label for="protein_symbol">Protein Symbol (e.g., TYK2)</label>
+                <input type="text" id="protein_symbol" name="protein_symbol" placeholder="Enter 4-letter symbol" maxlength="4" required>
+            </div>
+            <div class="form-group">
+                <label for="user_name">User Name</label>
+                <input type="text" id="user_name" name="user_name" placeholder="Your Name" required>
+            </div>
+            <div class="form-group">
+                <label for="user_email">Email Address (Optional)</label>
+                <input type="email" id="user_email" name="user_email" placeholder="email@example.com">
+            </div>
+            <div class="form-group">
+                <label for="cpus">Number of Cores (2–32)</label>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <input type="range" id="cpus_slider" min="2" max="32" step="1" value="8" style="flex: 1;">
+                    <input type="number" id="cpus" name="cpus" min="2" max="32" step="1" value="8" style="width: 5rem;">
+                </div>
+                <span id="cpus-hint" style="display: block; font-size: 0.85em; margin-top: 0.35rem; color: #666;"></span>
+            </div>
+            <script>
+                (function () {
+                    const slider = document.getElementById('cpus_slider');
+                    const number = document.getElementById('cpus');
+                    const clamp = v => Math.max(2, Math.min(32, v | 0 || 8));
+                    const updateHint = () => { if (window.updateCpusHint) window.updateCpusHint(); };
+                    slider.addEventListener('input', () => { number.value = clamp(slider.value); updateHint(); });
+                    number.addEventListener('input', () => { slider.value = clamp(number.value); updateHint(); });
+                    number.addEventListener('change', () => { number.value = clamp(number.value); slider.value = number.value; updateHint(); });
+                })();
+            </script>
+            <button type="submit">Submit Peptide Design Job</button>
+        </form>
+        
+        <div id="status">
+            <p id="message">Waiting for input...</p>
+            <div id="loading">Processing... (Do not close this page)</div>
+            <div id="downloadLink"></div>
+        </div>
+    </div>
+    
+    <div class="main-content content-card">
+        <div class="tab-buttons">
+            <button id="tab1Button" class="active">1. Template</button>
+            <button id="tab2Button" disabled>2. Results Table & Viewer</button>
+            <button id="tab3Button" disabled>3. T-Maps</button>
+            <button id="tab4Button" disabled>4. Score Comparison Plots</button>
+            <button id="tab5Button" disabled>5. Clustering & Heatmaps</button>
+            <button id="tab6Button" disabled>6. Tree-Map (MST)</button>
+        </div>
+
+        <div id="tab1-view" class="tab-content">
+            <h2>Template PDB Preview</h2>
+            <div id="pdb-viewer"></div>
+            <div id="pdb-data">Waiting for PDB upload...</div>
+        </div>
+        
+        <div id="tab2-view" class="tab-content hidden">
+            <h2>Predicted Complexes (Master ID: <span id="masterIdDisplay">N/A</span>)</h2>
+            <div id="ngl-viewer" tabindex="0">Click a sequence below to load structure.</div>
+            <div class="results-table-container">
+                <table id="resultsTable" class="results-table">
+                    <thead>
+                        <tr>
+                            <th>Peptide Sequence</th>
+                            <th>PDB Filename</th>
+                            <th>FoldX ΔΔG</th>
+                            <th>Rosetta Total</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div id="tab3-view" class="tab-content hidden clearfix">
+            <h2>T-Maps Highlighting</h2>
+            <div class="form-group" style="max-width: 400px;">
+                <label for="tmapDropdown">Select Clustering Metric:</label>
+                <select id="tmapDropdown" class="form-select">
+                    <optgroup label="Energy Selection">
+                        <option value="FoldX" selected>Top 10 by FoldX (Green/Gray)</option>
+                        <option value="Rosetta">Top 10 by Rosetta (Green/Gray)</option>
+                    </optgroup>
+                    <optgroup label="Physicochemical Properties">
+                        <option value="GRAVY">Hydrophobicity (GRAVY)</option>
+                        <option value="NetCharge">Net Charge (@ pH 7.4)</option>
+                        <option value="Aromaticity">Aromatic Content (F+W+Y)</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div id="tmap-foldx-best" class="plot-container"></div>
+            <div id="tmap-all-scores" class="plot-container hidden"></div> 
+        </div>
+        
+        <div id="tab4-view" class="tab-content hidden clearfix">
+            <h2>Score Distribution</h2>
+            <div id="score-comparison-scatter" class="plot-container plot-half-width"></div>
+            <div id="foldx-distribution-plot" class="plot-container plot-half-width"></div>
+        </div>
+        
+        <div id="tab5-view" class="tab-content hidden clearfix">
+            <h2>Advanced Analysis</h2>
+            <div id="pca-plot" class="plot-container plot-half-width"></div>
+            <div id="correlation-heatmap" class="plot-container plot-half-width"></div>
+        </div>
+
+        <div id="tab6-view" class="tab-content hidden clearfix">
+            <h2>Tree-Map (Minimum Spanning Tree)</h2>
+            <p class="text-muted">
+                Connecting peptides by chemical similarity (MHFP). Branches indicate structural evolution.
+            </p>
+            
+            <div class="form-group" style="max-width: 400px;">
+                <label for="tmap6Dropdown">Color Tree By:</label>
+                <select id="tmap6Dropdown" class="form-select">
+                    <optgroup label="Energy Selection">
+                        <option value="FoldX_Score" selected>FoldX ΔΔG</option>
+                        <option value="Rosetta_Total_Score">Rosetta Total Score</option>
+                    </optgroup>
+                    <optgroup label="Physicochemical Properties">
+                        <option value="GRAVY">Hydrophobicity (GRAVY)</option>
+                        <option value="NetCharge">Net Charge (@ pH 7.4)</option>
+                        <option value="Aromaticity">Aromatic Content (F+W+Y)</option>
+                        <option value="SolubilityPhase">Oil vs. Water Phase</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div id="tmap6-container" class="plot-container" style="height: 700px;"></div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='tab1_submission.js') }}"></script>
+<script src="{{ url_for('static', filename='tab2_results_table.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='index.js') }}"></script>
+
+</body>
+</html>

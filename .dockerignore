@@ -1,0 +1,26 @@
+# Reference-only folders and docs — never needed inside the image.
+*.md
+HANDOFF
+docs
+usr_local_bin
+blobs/blobs.sha256
+
+# Superseded / backup cruft — keep it out of the image.
+app/old_scripts
+**/*_bak*
+**/*.py3
+
+# Python / editor junk that may reappear.
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.DS_Store
+
+# VCS.
+.git
+.gitignore
+
+# The build tooling itself — Docker doesn't need these in the context.
+scripts/
+docker-compose.yml
+README.md

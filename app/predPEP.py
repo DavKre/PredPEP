@@ -72,11 +72,11 @@ def count_peptide_residues(pdb_path):
     return len(seen) or None
 
 def _kill_job(jdir):
-    """SIGTERM the job's manager process group (manager + its bash/Rosetta children). Best-effort."""
+    """SIGKILL the job's manager process group (manager + its bash/Rosetta children). Best-effort."""
     try:
         with open(os.path.join(jdir, 'manager.pid')) as f:
             pid = int(f.read().strip())
-        os.killpg(os.getpgid(pid), signal.SIGTERM)
+        os.killpg(os.getpgid(pid), signal.SIGKILL)
         return True
     except (FileNotFoundError, ProcessLookupError, ValueError, PermissionError):
         return False

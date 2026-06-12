@@ -16,14 +16,26 @@ window.loadJobs = async function () {
                 <td>${date}</td><td>${esc(j.protein_symbol)}</td><td>${esc(j.user_name)}</td>
                 <td>${esc(j.cpus)}</td><td>${esc(j.peptide_length)}</td>
                 <td class="${cls}">${esc(j.status)}</td><td>${dl}</td>
-                <td><button class="job-delete" data-id="${encodeURIComponent(j.job_id)}">Delete</button></td>
+                <td>${j.status === 'Processing' ? `<button class="job-stop" data-id="${encodeURIComponent(j.job_id)}">Stop</button> ` : ''}<button class="job-delete" data-id="${encodeURIComponent(j.job_id)}">Delete</button></td>
             </tr>`;
         }).join('');
+        tbody.querySelectorAll('.job-stop').forEach(b =>
+            b.addEventListener('click', () => window.stopJob(decodeURIComponent(b.dataset.id))));
         tbody.querySelectorAll('.job-delete').forEach(b =>
             b.addEventListener('click', () => window.deleteJob(decodeURIComponent(b.dataset.id))));
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="8">Error loading jobs: ${e}</td></tr>`;
     }
+};
+
+window.stopJob = async function (jobId) {
+    if (!confirm(`Stop job ${jobId}? Its pipeline will be terminated.`)) return;
+    try {
+        const res = await fetch(`/jobs/${encodeURIComponent(jobId)}/stop`, { method: 'POST' });
+        const data = await res.json();
+        if (!data.success) alert(`Stop failed: ${data.error || 'unknown'}`);
+    } catch (e) { alert(`Stop error: ${e}`); }
+    window.loadJobs();
 };
 
 window.deleteJob = async function (jobId) {

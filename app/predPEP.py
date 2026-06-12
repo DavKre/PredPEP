@@ -6,18 +6,7 @@ import subprocess
 import uuid
 import re
 import glob
-import pandas as pd
-from flask import Flask, request, render_template, send_from_directory, jsonify
-from werkzeug.utils import secure_filename
-
-# Import TMAP logic from the local utility
-try:
-    from tmap_utils import generate_tmap_coordinates
-except ImportError:
-    print("Warning: tmap_utils.py not found. TMAP Tree functionality will be limited.")
-    # FIX: Return 5 values (x, y, s, t, valid_indices) to match the new signature
-    # FIX: 5 Werte zurückgeben, um der neuen Signatur zu entsprechen
-    def generate_tmap_coordinates(seqs): return [], [], [], [], []
+from flask import Flask, request, send_from_directory, jsonify
 
 predPEP = Flask(__name__)
 
@@ -61,9 +50,10 @@ def get_master_id(job_id):
 # ----------------------------------------------------------------------
 
 @predPEP.route('/')
-def index():
-    """Renders the main page with the file upload form."""
-    return render_template('index.html')
+@predPEP.route('/health')
+def health():
+    """Liveness probe for the headless node."""
+    return jsonify({"service": "predpep-node", "status": "ok"})
 
 @predPEP.route('/upload', methods=['POST'])
 def upload_file():
@@ -216,51 +206,6 @@ def stream_final_pdb(job_id, relative_path):
         as_attachment=False, mimetype='chemical/x-pdb'
     )
 
-# ----------------------------------------------------------------------
-# ## 🌳 TMAP TREE ROUTE (MODIFIED FOR STABILITY)
-# ----------------------------------------------------------------------
-
-@predPEP.route('/get_tmap_tree/<job_id>', methods=['GET'])
-def get_tmap_tree(job_id):
-    """
-    Generates TMAP layout coordinates for the sequence similarity tree.
-    Filters metadata based on valid_indices to prevent frontend crashes.
-    """
-    try:
-        master_id = get_master_id(job_id)
-        csv_path = os.path.join(BASE_RESULT_FOLDER, master_id, "tab2_final_scores.csv")
-        
-        if not os.path.exists(csv_path):
-            return jsonify({'success': False, 'error': "Scores CSV not found yet."}), 404
-
-        df = pd.read_csv(csv_path)
-        
-        if 'pepSeq' not in df.columns:
-            return jsonify({'success': False, 'error': "CSV missing 'pepSeq' column."}), 500
-            
-        # Ensure sequences are clean strings and uppercase for RDKit
-        sequences = df['pepSeq'].fillna('').astype(str).str.upper().tolist()
-        
-        # Call the updated TMAP utility with 5 return values
-        x, y, s, t, valid_indices = generate_tmap_coordinates(sequences)
-        
-        if not valid_indices:
-             return jsonify({'success': False, 'error': "No valid peptide sequences found for T-MAP."}), 500
-
-        # Filter the original dataframe so that the metadata array matches the x/y coordinate arrays
-        filtered_metadata = df.iloc[valid_indices].to_dict(orient='records')
-        
-        return jsonify({
-            'success': True,
-            'x': x, 
-            'y': y, 
-            's': s, 
-            't': t,
-            'metadata': filtered_metadata
-        })
-    except Exception as e:
-        print(f"TMAP Tree Error: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 @predPEP.route('/download/<master_dir_name>/<filename>')
 def download_file(master_dir_name, filename):

@@ -1,0 +1,19 @@
+# --- Heavy, out-of-band assets (provided alongside the repo, see HANDOFF.md) ---
+# Extracted tool blobs (~23 GB)
+blobs/*.tar.gz
+# Vendored third-party frontend libraries (~586 MB) — removed entirely in Phase 2
+app/static/ngl-master/
+app/static/molstar/
+
+# --- Build / runtime artifacts ---
+*.log
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+
+# --- Superseded / reference cruft (kept on disk, out of the clean repo) ---
+usr_local_bin/
+old_scripts/
+**/*_bak*
+**/*.py3

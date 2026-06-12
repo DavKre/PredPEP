@@ -6,7 +6,7 @@
 # Layers are ordered least-volatile (top) to most-volatile (bottom) so that
 # editing app code only invalidates the final few layers.
 
-FROM nvidia/cuda:12.4.0-devel-ubuntu22.04
+FROM ubuntu:22.04
 
 # ---- 1. System packages -----------------------------------------------------
 # Same set as the original image history, plus curl (was missing — broke the
@@ -36,19 +36,8 @@ RUN groupadd --gid ${USER_GID} ${USER_NAME} \
 RUN --mount=type=bind,source=./blobs,target=/tmp/blobs,readonly \
     tar -xzf /tmp/blobs/rosetta.tar.gz    -C /usr/local/ \
  && tar -xzf /tmp/blobs/foldx.tar.gz      -C /usr/local/ \
- && tar -xzf /tmp/blobs/ogdf.tar.gz       -C /usr/local/ \
- && tar -xzf /tmp/blobs/tmap.tar.gz       -C /usr/local/ \
  && tar -xzf /tmp/blobs/miniforge3.tar.gz -C /home/${USER_NAME}/ \
  && chown -R ${USER_UID}:${USER_GID} /home/${USER_NAME}/miniforge3
-
-# Register OGDF's shared libs with the dynamic linker. Needed at runtime by the
-# conda env's `tmap` native extension, which links against libOGDF.so.2025.10.01
-# (located in /usr/local/ogdf/build/ after blob extraction). Production image's
-# LD_LIBRARY_PATH didn't cover this — how it resolved upstream is unknown
-# (likely an ld.so.conf.d entry in a hand-committed layer, or tmap was silently
-# broken there and masked by predPEP.py's try/except ImportError fallback).
-# Kept as its own small layer so blob extraction stays cached on rebuild.
-RUN echo "/usr/local/ogdf/build" > /etc/ld.so.conf.d/ogdf.conf && ldconfig
 
 # ---- 4. Pipeline scripts + /usr/local/bin symlinks --------------------------
 # Use bash for the remaining RUN / shell-form instructions so `shopt -s
@@ -71,13 +60,13 @@ COPY --chown=${USER_UID}:${USER_GID} app/ /opt/sp-predPEP/
 # ---- 6. Runtime configuration ----------------------------------------------
 ENV HOME=/home/spacepep \
     FLASK_APP=predPEP.py \
-    PATH=/home/spacepep/miniforge3/envs/predPEP/bin:/home/spacepep/miniforge3/condabin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    PATH=/home/spacepep/miniforge3/envs/predPEP/bin:/home/spacepep/miniforge3/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 WORKDIR /opt/sp-predPEP
 EXPOSE 6363
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-  CMD curl --fail http://localhost:6363/ || exit 1
+  CMD curl --fail http://localhost:6363/health || exit 1
 
 USER spacepep
 

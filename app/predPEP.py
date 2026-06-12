@@ -6,6 +6,8 @@ import subprocess
 import uuid
 import re
 import glob
+import json
+from datetime import datetime, timezone
 import pandas as pd
 from flask import Flask, request, render_template, send_from_directory, jsonify
 from werkzeug.utils import secure_filename
@@ -55,6 +57,18 @@ def get_master_id(job_id):
     #pdb_base = job_id.split('_')[0]
     #return pdb_base
     return job_id
+
+def count_peptide_residues(pdb_path):
+    """Count unique chain-B residues (the peptide) by their Cα atoms. Returns int or None."""
+    seen = set()
+    try:
+        with open(pdb_path) as f:
+            for line in f:
+                if line.startswith(("ATOM", "HETATM")) and line[21:22] == "B" and line[12:16].strip() == "CA":
+                    seen.add(line[22:27])  # resSeq + iCode (fixed columns)
+    except Exception:
+        return None
+    return len(seen) or None
 
 # ----------------------------------------------------------------------
 # ## 🌐 Flask Routes
@@ -117,6 +131,21 @@ def upload_file():
         file.save(filepath)
     except Exception as e:
         return jsonify({'success': False, 'error': f'Failed to save file: {e}'})
+
+    # Persist submission metadata for the Jobs list (survives on the volume)
+    try:
+        with open(os.path.join(master_result_folder, 'job.json'), 'w') as jf:
+            json.dump({
+                'job_id': job_folder_name,
+                'submitted_at': datetime.now(timezone.utc).isoformat(),
+                'protein_symbol': protein_symbol,
+                'user_name': user_name,
+                'cpus': int(cpus),
+                'pdb_filename': new_filename,
+                'peptide_length': count_peptide_residues(filepath),
+            }, jf)
+    except Exception as e:
+        predPEP.logger.warning(f"[submit] could not write job.json: {e}")
 
     # 4. LAUNCH ASYNCHRONOUS ITERATIVE MANAGER
     try:
@@ -266,6 +295,55 @@ def get_tmap_tree(job_id):
     except Exception as e:
         print(f"TMAP Tree Error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@predPEP.route('/jobs', methods=['GET'])
+def list_jobs():
+    """List all jobs (newest first) with derived status — no auth, all jobs visible."""
+    jobs = []
+    try:
+        for entry in os.listdir(BASE_RESULT_FOLDER):
+            jdir = os.path.join(BASE_RESULT_FOLDER, entry)
+            if not os.path.isdir(jdir):
+                continue
+            meta = {}
+            meta_path = os.path.join(jdir, 'job.json')
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path) as f:
+                        meta = json.load(f)
+                except Exception:
+                    meta = {}
+            meta.setdefault('job_id', entry)
+            if os.path.exists(os.path.join(jdir, f"{entry}.zip")):
+                meta['status'] = 'Complete'
+                meta['download_url'] = f"/download/{entry}/{entry}.zip"
+            else:
+                meta['status'] = 'Processing'
+                meta['download_url'] = None
+            jobs.append(meta)
+        jobs.sort(key=lambda j: j.get('submitted_at', ''), reverse=True)
+        return jsonify({'success': True, 'jobs': jobs})
+    except FileNotFoundError:
+        return jsonify({'success': True, 'jobs': []})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@predPEP.route('/jobs/<job_id>', methods=['DELETE'])
+def delete_job(job_id):
+    """Delete a job's result + upload dirs (reclaims disk). No auth."""
+    if '/' in job_id or '..' in job_id or job_id in ('', '.', '..'):
+        return jsonify({'success': False, 'error': 'Invalid job id.'}), 400
+    removed = []
+    for base in (BASE_RESULT_FOLDER, BASE_UPLOAD_FOLDER):
+        d = os.path.join(base, job_id)
+        if os.path.isdir(d):
+            shutil.rmtree(d, ignore_errors=True)
+            removed.append(d)
+    if not removed:
+        return jsonify({'success': False, 'error': 'Job not found.'}), 404
+    return jsonify({'success': True, 'deleted': job_id})
+
 
 @predPEP.route('/download/<master_dir_name>/<filename>')
 def download_file(master_dir_name, filename):

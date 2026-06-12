@@ -7,6 +7,7 @@ import uuid
 import re
 import glob
 import json
+import signal
 from datetime import datetime, timezone
 import pandas as pd
 from flask import Flask, request, render_template, send_from_directory, jsonify
@@ -69,6 +70,16 @@ def count_peptide_residues(pdb_path):
     except Exception:
         return None
     return len(seen) or None
+
+def _kill_job(jdir):
+    """SIGTERM the job's manager process group (manager + its bash/Rosetta children). Best-effort."""
+    try:
+        with open(os.path.join(jdir, 'manager.pid')) as f:
+            pid = int(f.read().strip())
+        os.killpg(os.getpgid(pid), signal.SIGTERM)
+        return True
+    except (FileNotFoundError, ProcessLookupError, ValueError, PermissionError):
+        return False
 
 # ----------------------------------------------------------------------
 # ## 🌐 Flask Routes
@@ -160,12 +171,17 @@ def upload_file():
             job_folder_name, master_result_folder, job_folder_name
         ]
 
-        subprocess.Popen(
-            manager_command, close_fds=True,
+        proc = subprocess.Popen(
+            manager_command, close_fds=True, start_new_session=True,
             stdout=open(os.path.join(master_result_folder, f'{job_folder_name}_manager_stdout.log'), 'w'),
             stderr=open(os.path.join(master_result_folder, f'{job_folder_name}_manager_stderr.log'), 'w')
         )
-        
+        try:
+            with open(os.path.join(master_result_folder, 'manager.pid'), 'w') as pf:
+                pf.write(str(proc.pid))
+        except Exception as e:
+            predPEP.logger.warning(f"[submit] could not write manager.pid: {e}")
+
         return jsonify({
             'success': True,
             'message': f'Job submitted for {new_pdb_base} (ID: {job_folder_name}).',
@@ -317,6 +333,9 @@ def list_jobs():
             if os.path.exists(os.path.join(jdir, f"{entry}.zip")):
                 meta['status'] = 'Complete'
                 meta['download_url'] = f"/download/{entry}/{entry}.zip"
+            elif os.path.exists(os.path.join(jdir, 'STOPPED')):
+                meta['status'] = 'Stopped'
+                meta['download_url'] = None
             else:
                 meta['status'] = 'Processing'
                 meta['download_url'] = None
@@ -334,6 +353,7 @@ def delete_job(job_id):
     """Delete a job's result + upload dirs (reclaims disk). No auth."""
     if '/' in job_id or '..' in job_id or job_id in ('', '.', '..'):
         return jsonify({'success': False, 'error': 'Invalid job id.'}), 400
+    _kill_job(os.path.join(BASE_RESULT_FOLDER, job_id))
     removed = []
     for base in (BASE_RESULT_FOLDER, BASE_UPLOAD_FOLDER):
         d = os.path.join(base, job_id)
@@ -343,6 +363,22 @@ def delete_job(job_id):
     if not removed:
         return jsonify({'success': False, 'error': 'Job not found.'}), 404
     return jsonify({'success': True, 'deleted': job_id})
+
+
+@predPEP.route('/jobs/<job_id>/stop', methods=['POST'])
+def stop_job(job_id):
+    """Stop a running job: kill its process group + mark it Stopped. No auth."""
+    if '/' in job_id or '..' in job_id or job_id in ('', '.', '..'):
+        return jsonify({'success': False, 'error': 'Invalid job id.'}), 400
+    jdir = os.path.join(BASE_RESULT_FOLDER, job_id)
+    if not os.path.isdir(jdir):
+        return jsonify({'success': False, 'error': 'Job not found.'}), 404
+    killed = _kill_job(jdir)
+    try:
+        open(os.path.join(jdir, 'STOPPED'), 'w').close()
+    except Exception:
+        pass
+    return jsonify({'success': True, 'stopped': job_id, 'killed': killed})
 
 
 @predPEP.route('/download/<master_dir_name>/<filename>')

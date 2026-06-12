@@ -22,6 +22,7 @@ fi
 
 docker run -d \
   --name "${CONTAINER}" \
+  -v predpep_data:/tmp/pepspec \
   -p 6363:6363 \
   --restart unless-stopped \
   "${IMAGE}"

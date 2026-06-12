@@ -7,4 +7,9 @@ services:
     container_name: predpep_app
     ports:
       - "6363:6363"
+    volumes:
+      - predpep_data:/tmp/pepspec
     restart: unless-stopped
+
+volumes:
+  predpep_data:

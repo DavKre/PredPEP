@@ -30,6 +30,8 @@ Launches `predpep_app` detached with `--restart unless-stopped`. Open the **web 
 
 The node serves the original browser interface at **http://&lt;host&gt;:6363/** alongside the JSON API — open it in a browser to submit a job (protein symbol, user name, PDB upload, CPU count) and view results (score table, NGL structure viewer, Plotly plots). It's **baked into every image**, so it's available on each deployed machine with no extra steps or flags.
 
+A **Jobs** tab lists every job on the machine (date, submission details, status, a download link, and a delete button) — persisted on a Docker volume so they survive page reloads and container restarts. Deleting a job removes its files from disk (use it to reclaim space). No login: all jobs are visible to anyone who can reach the node.
+
 - **The browser needs internet access.** The viewer libraries (NGL, Plotly) are loaded from public CDNs (`cdn.jsdelivr.net`, `cdn.plot.ly`); only the small app scripts are served locally. The backend itself (job execution) does **not** need internet.
 - `/` serves the UI; `/health` returns JSON (`{"service":"predpep-node","status":"ok"}`) for liveness checks — used by DDN and the Docker healthcheck.
 - The **TMAP tree tab is non-functional** by design (see [Known limitations](#known-limitations)) — matches production.
@@ -85,6 +87,8 @@ Targets need only Docker and ~10 GB free disk — no GPU, no build toolchain, no
 ## Known limitations
 
 - **TMAP tree-view tab is non-functional by design.** `tmap_utils.py` requires the `mhfp` package, which isn't in the conda env. predPEP.py falls back to a no-op via `except ImportError`. Matches production behavior — the feature is not yet implemented.
+- **Job data persists on a Docker volume** (`predpep_data`, mounted at `/tmp/pepspec`). It survives container recreate/redeploy; back it up with `docker run --rm -v predpep_data:/data -v "$PWD":/backup busybox tar czf /backup/predpep_data.tgz -C /data .`. Removing the volume (`docker volume rm predpep_data`) erases all job history.
+- A job interrupted by a container restart shows **"Processing"** indefinitely (no run-state tracking yet); deleting a *running* job removes its files and its background run then fails. Both are resolved by the planned job-queue work.
 - **FoldX binary is bundled** at `/usr/local/foldx26Linux64_0/`. Covered by an academic license — do **not** publicly redistribute this image.
 - **Rosetta binaries are bundled** at `/usr/local/rosetta_pkgs/`. Same academic-license constraint.
 - The gevent worker needs a few seconds after container start to fork and import the Flask app. The Dockerfile healthcheck has `--start-period=90s` to cover this; the UI itself is typically serving within ~5 seconds.

@@ -103,6 +103,12 @@
         .plot-half-width { width: 48%; float: left; margin-right: 2%; } 
         .clearfix::after { content: ""; clear: both; display: table; }
         .text-muted { color: #6c757d; font-size: 0.9rem; margin-bottom: 1rem; }
+        .jobs-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        .jobs-table th, .jobs-table td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+        .jobs-table th { background: #f3f3f3; }
+        .status-complete { color: #137333; font-weight: bold; }
+        .status-processing { color: #b06000; }
+        .job-delete { background: #c5221f; color: #fff; border: none; padding: 3px 8px; cursor: pointer; border-radius: 3px; }
     </style>
 </head>
 <body>
@@ -168,6 +174,7 @@
             <button id="tab4Button" disabled>4. Score Comparison Plots</button>
             <button id="tab5Button" disabled>5. Clustering & Heatmaps</button>
             <button id="tab6Button" disabled>6. Tree-Map (MST)</button>
+            <button id="tab7Button">7. Jobs</button>
         </div>
 
         <div id="tab1-view" class="tab-content">
@@ -249,11 +256,23 @@
             </div>
             <div id="tmap6-container" class="plot-container" style="height: 700px;"></div>
         </div>
+
+        <div id="tab7-view" class="tab-content hidden">
+            <h2>Jobs</h2>
+            <p style="font-size:0.9em;color:#555;">All jobs on this machine — no login, everyone sees all jobs. <b>Delete</b> permanently removes a job's files from disk. (A job left "Processing" after a restart is orphaned — proper run-state tracking comes later.)</p>
+            <table id="jobsTable" class="jobs-table">
+                <thead><tr>
+                    <th>Date</th><th>Protein</th><th>User</th><th>CPUs</th><th>Pep. length</th><th>Status</th><th>Download</th><th>Delete</th>
+                </tr></thead>
+                <tbody id="jobsTableBody"><tr><td colspan="8">Loading…</td></tr></tbody>
+            </table>
+        </div>
     </div>
 </div>
 
 <script src="{{ url_for('static', filename='tab1_submission.js') }}"></script>
 <script src="{{ url_for('static', filename='tab2_results_table.js') }}"></script>
+<script src="{{ url_for('static', filename='tab7_jobs.js') }}"></script>
 <script type="module" src="{{ url_for('static', filename='index.js') }}"></script>
 
 </body>

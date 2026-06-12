@@ -15,7 +15,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('tab3Button'),
         document.getElementById('tab4Button'),
         document.getElementById('tab5Button'),
-        document.getElementById('tab6Button')
+        document.getElementById('tab6Button'),
+        document.getElementById('tab7Button')
     ];
     const tabViews = [
         document.getElementById('tab1-view'),
@@ -23,10 +24,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('tab3-view'),
         document.getElementById('tab4-view'),
         document.getElementById('tab5-view'),
-        document.getElementById('tab6-view')
+        document.getElementById('tab6-view'),
+        document.getElementById('tab7-view')
     ];
 
     window.switchTab = (targetIndex) => {
+        if (window.stopJobsPolling) window.stopJobsPolling();
         tabViews.forEach((view, index) => {
             if (index === targetIndex) {
                 tabButtons[index].classList.add('active');
@@ -44,6 +47,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (index > 1) {
                     window.handlePlotRendering(index);
                 }
+                if (index === 6 && window.startJobsPolling) window.startJobsPolling();
             } else {
                 tabButtons[index].classList.remove('active');
                 view.classList.add('hidden');

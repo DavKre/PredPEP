@@ -31,13 +31,26 @@ RUN groupadd --gid ${USER_GID} ${USER_NAME} \
 
 # ---- 3. Pre-built tool blobs ------------------------------------------------
 # Bind-mounted (not COPY'd) so the 23 GB of tarballs never enter any image
-# layer. Extraction + ownership fix happen in a single RUN so there's one
-# layer for all tools.
+# layer. Extraction + ownership fix + Rosetta prune happen in a single RUN so
+# there's one layer for all tools AND the 49 GB Rosetta tree never persists:
+# the pipeline only runs pepspec.static.linuxgccrelease (a 184 MB static binary)
+# with main/database, so we keep those + protein_tools/scripts and drop the rest
+# (~45 GB of other apps/variants/source/tests). See
+# docs/superpowers/specs/2026-06-12-phase2a2-rosetta-prune-design.md.
 RUN --mount=type=bind,source=./blobs,target=/tmp/blobs,readonly \
     tar -xzf /tmp/blobs/rosetta.tar.gz    -C /usr/local/ \
  && tar -xzf /tmp/blobs/foldx.tar.gz      -C /usr/local/ \
  && tar -xzf /tmp/blobs/miniforge3.tar.gz -C /home/${USER_NAME}/ \
- && chown -R ${USER_UID}:${USER_GID} /home/${USER_NAME}/miniforge3
+ && chown -R ${USER_UID}:${USER_GID} /home/${USER_NAME}/miniforge3 \
+ && R=/usr/local/rosetta_pkgs/rosetta.binary.ubuntu.release-408 \
+ && BINREL=main/source/build/src/release/linux/5.4/64/x86/gcc/7/static/pepspec.static.linuxgccrelease \
+ && mv "$R/$BINREL" /tmp/pepspec.bin \
+ && rm -rf "$R/main/source/build" \
+ && mkdir -p "$(dirname "$R/$BINREL")" \
+ && mv /tmp/pepspec.bin "$R/$BINREL" \
+ && find "$R/main/source" -mindepth 1 -maxdepth 1 ! -name bin ! -name build -exec rm -rf {} + \
+ && find "$R/main/tools"  -mindepth 1 -maxdepth 1 ! -name protein_tools -exec rm -rf {} + \
+ && find "$R/main"        -mindepth 1 -maxdepth 1 ! -name database ! -name source ! -name tools -exec rm -rf {} +
 
 # ---- 4. Pipeline scripts + /usr/local/bin symlinks --------------------------
 # Use bash for the remaining RUN / shell-form instructions so `shopt -s

@@ -1,6 +1,6 @@
 # predPEP local
 
-Headless Flask + gunicorn JSON backend for peptide design, running Rosetta + FoldX pipelines (CPU-only). No browser UI — it exposes an HTTP API on port 6363 (`/health` for liveness). Rebuilt from artifacts extracted from the production image `predpep:v2`. For the extraction story, blob inventory, and historical context, see [HANDOFF.md](HANDOFF.md).
+Flask + gunicorn backend for peptide design, running Rosetta + FoldX pipelines (CPU-only). It serves a JSON API for programmatic/DDN use **and** the original browser UI, both on port 6363 (`/` = UI, `/health` = liveness). Rebuilt from artifacts extracted from the production image `predpep:v2`. For the extraction story, blob inventory, and historical context, see [HANDOFF.md](HANDOFF.md).
 
 ## Prerequisites
 
@@ -24,7 +24,15 @@ Takes ~5–10 min on a fresh build (Rosetta tar extraction is the bottleneck). F
 ./scripts/run.sh
 ```
 
-Launches `predpep_app` detached with `--restart unless-stopped`. The JSON API is on http://localhost:6363 (check `curl http://localhost:6363/health`).
+Launches `predpep_app` detached with `--restart unless-stopped`. Open the **web UI** at http://localhost:6363/ , or use the JSON API (`curl http://localhost:6363/health`). See [Web UI](#web-ui) below.
+
+## Web UI
+
+The node serves the original browser interface at **http://&lt;host&gt;:6363/** alongside the JSON API — open it in a browser to submit a job (protein symbol, user name, PDB upload, CPU count) and view results (score table, NGL structure viewer, Plotly plots). It's **baked into every image**, so it's available on each deployed machine with no extra steps or flags.
+
+- **The browser needs internet access.** The viewer libraries (NGL, Plotly) are loaded from public CDNs (`cdn.jsdelivr.net`, `cdn.plot.ly`); only the small app scripts are served locally. The backend itself (job execution) does **not** need internet.
+- `/` serves the UI; `/health` returns JSON (`{"service":"predpep-node","status":"ok"}`) for liveness checks — used by DDN and the Docker healthcheck.
+- The **TMAP tree tab is non-functional** by design (see [Known limitations](#known-limitations)) — matches production.
 
 ## Code iteration
 
@@ -58,6 +66,21 @@ docker compose down
 ```
 
 Compose and `run.sh` both create a container named `predpep_app` on port 6363 — they can't coexist. Pick one; if you've started the container via `scripts/run.sh`, stop it before `docker compose up -d` (and vice versa).
+
+## Distributing the image (deploying machine-by-machine)
+
+The built image is self-contained (~7 GB) — to roll it out to other machines without each one rebuilding (or needing the 23 GB of blobs), copy the image directly:
+
+```
+# On the build host:
+docker save predpep:local | gzip > predpep-local.tar.gz      # ~3–4 GB compressed
+
+# Copy predpep-local.tar.gz to each target, then on the target:
+docker load < predpep-local.tar.gz
+docker run -d --name predpep_app -p 6363:6363 --restart unless-stopped predpep:local
+```
+
+Targets need only Docker and ~10 GB free disk — no GPU, no build toolchain, no blobs. (A private registry works too: `docker push`/`pull` instead of save/load.)
 
 ## Known limitations
 

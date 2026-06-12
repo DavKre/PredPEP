@@ -2,10 +2,8 @@
 
 // --- 1. RE-EXPORTS ---
 // These allow index.js to import everything from this one hub.
-export { renderTSNEPlots } from './tab3_tmaps.js';
 export { renderComparisonPlots } from './tab4_plots.js';
 export { renderAdvancedPlots } from './tab5_analysis.js';
-export { renderMSTTree } from './tab6_tmap.js'; // Added for Tab 6
 
 // Global variables to store parsed and processed data
 window.globalData = {

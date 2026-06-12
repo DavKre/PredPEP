@@ -161,7 +161,7 @@
         
         <div id="status">
             <p id="message">Waiting for input...</p>
-            <div id="loading">Processing... (Do not close this page)</div>
+            <div id="loading">Processing… you can leave this page — the job keeps running. Track it in the <b>Jobs</b> tab.</div>
             <div id="downloadLink"></div>
         </div>
     </div>
@@ -170,11 +170,9 @@
         <div class="tab-buttons">
             <button id="tab1Button" class="active">1. Template</button>
             <button id="tab2Button" disabled>2. Results Table & Viewer</button>
-            <button id="tab3Button" disabled>3. T-Maps</button>
-            <button id="tab4Button" disabled>4. Score Comparison Plots</button>
-            <button id="tab5Button" disabled>5. Clustering & Heatmaps</button>
-            <button id="tab6Button" disabled>6. Tree-Map (MST)</button>
-            <button id="tab7Button">7. Jobs</button>
+            <button id="tab4Button" disabled>3. Score Comparison Plots</button>
+            <button id="tab5Button" disabled>4. Clustering & Heatmaps</button>
+            <button id="tab7Button">5. Jobs</button>
         </div>
 
         <div id="tab1-view" class="tab-content">
@@ -201,26 +199,6 @@
             </div>
         </div>
         
-        <div id="tab3-view" class="tab-content hidden clearfix">
-            <h2>T-Maps Highlighting</h2>
-            <div class="form-group" style="max-width: 400px;">
-                <label for="tmapDropdown">Select Clustering Metric:</label>
-                <select id="tmapDropdown" class="form-select">
-                    <optgroup label="Energy Selection">
-                        <option value="FoldX" selected>Top 10 by FoldX (Green/Gray)</option>
-                        <option value="Rosetta">Top 10 by Rosetta (Green/Gray)</option>
-                    </optgroup>
-                    <optgroup label="Physicochemical Properties">
-                        <option value="GRAVY">Hydrophobicity (GRAVY)</option>
-                        <option value="NetCharge">Net Charge (@ pH 7.4)</option>
-                        <option value="Aromaticity">Aromatic Content (F+W+Y)</option>
-                    </optgroup>
-                </select>
-            </div>
-            <div id="tmap-foldx-best" class="plot-container"></div>
-            <div id="tmap-all-scores" class="plot-container hidden"></div> 
-        </div>
-        
         <div id="tab4-view" class="tab-content hidden clearfix">
             <h2>Score Distribution</h2>
             <div id="score-comparison-scatter" class="plot-container plot-half-width"></div>
@@ -231,30 +209,6 @@
             <h2>Advanced Analysis</h2>
             <div id="pca-plot" class="plot-container plot-half-width"></div>
             <div id="correlation-heatmap" class="plot-container plot-half-width"></div>
-        </div>
-
-        <div id="tab6-view" class="tab-content hidden clearfix">
-            <h2>Tree-Map (Minimum Spanning Tree)</h2>
-            <p class="text-muted">
-                Connecting peptides by chemical similarity (MHFP). Branches indicate structural evolution.
-            </p>
-            
-            <div class="form-group" style="max-width: 400px;">
-                <label for="tmap6Dropdown">Color Tree By:</label>
-                <select id="tmap6Dropdown" class="form-select">
-                    <optgroup label="Energy Selection">
-                        <option value="FoldX_Score" selected>FoldX ΔΔG</option>
-                        <option value="Rosetta_Total_Score">Rosetta Total Score</option>
-                    </optgroup>
-                    <optgroup label="Physicochemical Properties">
-                        <option value="GRAVY">Hydrophobicity (GRAVY)</option>
-                        <option value="NetCharge">Net Charge (@ pH 7.4)</option>
-                        <option value="Aromaticity">Aromatic Content (F+W+Y)</option>
-                        <option value="SolubilityPhase">Oil vs. Water Phase</option>
-                    </optgroup>
-                </select>
-            </div>
-            <div id="tmap6-container" class="plot-container" style="height: 700px;"></div>
         </div>
 
         <div id="tab7-view" class="tab-content hidden">

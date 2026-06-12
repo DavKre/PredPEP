@@ -1,5 +1,5 @@
 // static/index.js
-import { processAllData, renderTSNEPlots, renderComparisonPlots, renderAdvancedPlots, renderMSTTree } from './plots_utils.js';
+import { processAllData, renderComparisonPlots, renderAdvancedPlots } from './plots_utils.js';
 
 window.currentJobId = null;
 window.statusInterval = null;
@@ -12,19 +12,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tabButtons = [
         document.getElementById('tab1Button'),
         document.getElementById('tab2Button'),
-        document.getElementById('tab3Button'),
         document.getElementById('tab4Button'),
         document.getElementById('tab5Button'),
-        document.getElementById('tab6Button'),
         document.getElementById('tab7Button')
     ];
     const tabViews = [
         document.getElementById('tab1-view'),
         document.getElementById('tab2-view'),
-        document.getElementById('tab3-view'),
         document.getElementById('tab4-view'),
         document.getElementById('tab5-view'),
-        document.getElementById('tab6-view'),
         document.getElementById('tab7-view')
     ];
 
@@ -47,7 +43,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (index > 1) {
                     window.handlePlotRendering(index);
                 }
-                if (index === 6 && window.startJobsPolling) window.startJobsPolling();
+                if (index === 4 && window.startJobsPolling) window.startJobsPolling();
             } else {
                 tabButtons[index].classList.remove('active');
                 view.classList.add('hidden');
@@ -78,31 +74,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         switch (tabIndex) {
             case 2:
-                renderTSNEPlots(document.getElementById('tmapDropdown').value || 'FoldX');
-                break;
-            case 3:
                 renderComparisonPlots();
                 break;
-            case 4:
+            case 3:
                 renderAdvancedPlots();
-                break;
-            case 5: // Tab 6 logic
-                renderMSTTree(document.getElementById('tmap6Dropdown').value || 'FoldX_Score');
                 break;
         }
     };
     
-    document.getElementById('tmapDropdown').addEventListener('change', function() {
-        if (!this.disabled) renderTSNEPlots(this.value);
-    });
-
-    // Listener for new Tab 6 dropdown
-    const tmap6Drop = document.getElementById('tmap6Dropdown');
-    if (tmap6Drop) {
-        tmap6Drop.addEventListener('change', function() {
-            if (!this.disabled) renderMSTTree(this.value);
-        });
-    }
 });
 
 async function fetchAndLoadResults(jobId) {
@@ -112,7 +91,7 @@ async function fetchAndLoadResults(jobId) {
         if (rawData.success) {
             processAllData(jobId, rawData);
             // Enable all 6 buttons (2-6)
-            ['tab2Button', 'tab3Button', 'tab4Button', 'tab5Button', 'tab6Button'].forEach(id => {
+            ['tab2Button', 'tab4Button', 'tab5Button'].forEach(id => {
                 const b = document.getElementById(id);
                 if (b) b.disabled = false;
             });

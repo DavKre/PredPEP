@@ -155,8 +155,8 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
     document.getElementById('downloadLink').innerHTML = "";
     document.getElementById('loading').style.display = 'block';
 
-    // Disable ALL result tabs (including Tab 6)
-    ['tab2Button', 'tab3Button', 'tab4Button', 'tab5Button', 'tab6Button'].forEach(id => {
+    // Disable result tabs until results load
+    ['tab2Button', 'tab4Button', 'tab5Button'].forEach(id => {
         const btn = document.getElementById(id);
         if (btn) btn.disabled = true;
     });

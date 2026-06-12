@@ -29,7 +29,6 @@ fi
 
 docker run -d \
   --name "${CONTAINER}" \
-  --gpus all \
   -p "${HOST_PORT}:6363" \
   -v "${ROOT}/app:/opt/sp-predPEP" \
   -v "${ROOT}/pipeline:/usr/local/pepspec_pipe" \

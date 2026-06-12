@@ -1,14 +1,14 @@
 # predPEP local
 
-Flask + gunicorn web UI for peptide design, running Rosetta + FoldX pipelines. Rebuilt from artifacts extracted from the production image `predpep:v2` on the shared GPU server. For the extraction story, blob inventory, and historical context, see [HANDOFF.md](HANDOFF.md).
+Headless Flask + gunicorn JSON backend for peptide design, running Rosetta + FoldX pipelines (CPU-only). No browser UI — it exposes an HTTP API on port 6363 (`/health` for liveness). Rebuilt from artifacts extracted from the production image `predpep:v2`. For the extraction story, blob inventory, and historical context, see [HANDOFF.md](HANDOFF.md).
 
 ## Prerequisites
 
-- NVIDIA GPU, driver 550+ (for CUDA 12.4 compatibility)
-- `nvidia-container-toolkit` installed, `nvidia` runtime registered in Docker
 - Docker 23+ (the Dockerfile uses `RUN --mount=type=bind`, which requires BuildKit — default in 23+)
-- ~60 GB free disk under Docker's storage root (final image is ~64 GB)
+- ~50 GB free disk under Docker's storage root (final image size is printed at the end of `./scripts/build.sh`)
 - Port 6363 free on the host
+
+CPU-only — no GPU, NVIDIA driver, or nvidia-container-toolkit required. Runs on any x86-64 Linux host with Docker.
 
 ## First-time build
 
@@ -24,7 +24,7 @@ Takes ~5–10 min on a fresh build (Rosetta tar extraction is the bottleneck). F
 ./scripts/run.sh
 ```
 
-Launches `predpep_app` detached with GPU access and `--restart unless-stopped`. Open http://localhost:6363.
+Launches `predpep_app` detached with `--restart unless-stopped`. The JSON API is on http://localhost:6363 (check `curl http://localhost:6363/health`).
 
 ## Code iteration
 
@@ -72,5 +72,4 @@ Compose and `run.sh` both create a container named `predpep_app` on port 6363 �
 - Healthcheck state: `docker inspect --format '{{.State.Health.Status}}' predpep_app`
 - Live logs: `docker logs -f predpep_app`
 - Poke around inside: `docker exec -it predpep_app bash`
-- GPU visible to the app: `docker exec predpep_app nvidia-smi` (if that fails, the nvidia runtime isn't configured — check `docker info | grep Runtimes`)
 - Startup import errors: grep the log for `Traceback` or `ImportError`. The conda env at `/home/spacepep/miniforge3/envs/predPEP/` is baked into the image — adding packages requires rebuilding, not a runtime install.

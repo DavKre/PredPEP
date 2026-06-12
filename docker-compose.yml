@@ -8,10 +8,3 @@ services:
     ports:
       - "6363:6363"
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]

@@ -180,7 +180,7 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
             const jobId = data.job_id;
             window.currentJobId = jobId;
 
-            document.getElementById('message').textContent = "Upload successful. Job ID: " + jobId;
+            document.getElementById('message').textContent = data.message || ("Upload successful. Job ID: " + jobId);
 
             // Start polling every 5 seconds (10s is a bit slow for feedback)
             // pollStatus is defined in index.js

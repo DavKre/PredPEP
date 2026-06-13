@@ -124,7 +124,7 @@ window.pollStatus = async (jobId) => {
             // ---------------------------------------------------------
 
             await fetchAndLoadResults(jobId);
-        } else if (data.status === 'Stopped' || data.status === 'Pending/Failed') {
+        } else if (['Stopped', 'Failed', 'Pending/Failed'].includes(data.status)) {
             clearInterval(window.statusInterval);
             document.getElementById('loading').style.display = 'none';
         }

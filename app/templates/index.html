@@ -108,6 +108,8 @@
         .jobs-table th { background: #f3f3f3; }
         .status-complete { color: #137333; font-weight: bold; }
         .status-processing { color: #b06000; }
+        .status-queued { color: #555; }
+        .status-stopped { color: #c5221f; font-weight: bold; }
         .job-delete { background: #c5221f; color: #fff; border: none; padding: 3px 8px; cursor: pointer; border-radius: 3px; }
         .job-stop { background: #b06000; color: #fff; border: none; padding: 3px 8px; cursor: pointer; border-radius: 3px; }
     </style>
@@ -214,6 +216,12 @@
 
         <div id="tab7-view" class="tab-content hidden">
             <h2>Jobs</h2>
+            <div style="margin:0.5rem 0;">
+                <div id="diskLabel" style="font-size:0.85em;color:#555;">Disk: …</div>
+                <div style="background:#eee;border-radius:4px;height:10px;overflow:hidden;">
+                    <div id="diskBar" style="height:10px;width:0%;background:#137333;transition:width .3s;"></div>
+                </div>
+            </div>
             <p style="font-size:0.9em;color:#555;">All jobs on this machine — no login, everyone sees all jobs. <b>Delete</b> permanently removes a job's files from disk. (A job left "Processing" after a restart is orphaned — proper run-state tracking comes later.)</p>
             <table id="jobsTable" class="jobs-table">
                 <thead><tr>

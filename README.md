@@ -78,18 +78,32 @@ Compose and `run.sh` both create a container named `predpep_app` on port 6363 �
 
 ## Distributing the image (deploying machine-by-machine)
 
-The built image is self-contained (~7 GB) — to roll it out to other machines without each one rebuilding (or needing the 23 GB of blobs), copy the image directly:
+The built image is self-contained (~7 GB) — to roll it out to other machines without each one rebuilding (or needing the 23 GB of blobs), copy the image directly. `predpep:local` already includes everything (scheduler, UI, all fixes); no rebuild is needed on the source machine.
+
+**Over SSH, no temp files (simplest):**
 
 ```
-# On the build host:
-docker save predpep:local | gzip > predpep-local.tar.gz      # ~3–4 GB compressed
-
-# Copy predpep-local.tar.gz to each target, then on the target:
-docker load < predpep-local.tar.gz
-docker run -d --name predpep_app -p 6363:6363 --restart unless-stopped predpep:local
+docker save predpep:local | gzip | ssh USER@TARGET 'gunzip | docker load'
 ```
 
-Targets need only Docker and ~10 GB free disk — no GPU, no build toolchain, no blobs. (A private registry works too: `docker push`/`pull` instead of save/load.)
+**Or via a file with resume (better for flaky links):**
+
+```
+docker save predpep:local | gzip > predpep-local.tgz
+rsync -P predpep-local.tgz USER@TARGET:        # -P = progress + resume
+ssh USER@TARGET 'docker load < predpep-local.tgz && rm predpep-local.tgz'
+```
+
+Then launch the node on the target (the browser UI is baked in and served at `/`):
+
+```
+docker run -d --name predpep_app \
+  -v predpep_data:/tmp/pepspec \
+  --log-opt max-size=10m --log-opt max-file=3 --pids-limit 4096 \
+  -p 6363:6363 --restart unless-stopped predpep:local
+```
+
+The `-v predpep_data:/tmp/pepspec` volume is **required for jobs to persist** across restarts. Targets need only Docker (the SSH user must be able to run it) and ~10 GB free disk — no GPU, no build toolchain, no blobs. A private registry works too (`docker push`/`pull`). For a guided, self-verifying deploy on each machine, hand an agent the prompt in [docs/deploy-agent-prompt.md](docs/deploy-agent-prompt.md). For the DDN-side control API, see [docs/DDN_INTEGRATION.md](docs/DDN_INTEGRATION.md).
 
 ## Known limitations
 

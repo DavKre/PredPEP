@@ -65,8 +65,8 @@ def count_peptide_residues(pdb_path):
     try:
         with open(pdb_path) as f:
             for line in f:
-                if line.startswith(("ATOM", "HETATM")) and line[21:22] == "B" and line[12:16].strip() == "CA":
-                    seen.add(line[22:27])  # resSeq + iCode (fixed columns)
+                if line.startswith(("ATOM", "HETATM")) and line[21:22] == "B" and line[12:16].strip() == "CA" and line[76:78].strip() in ("C", ""):
+                    seen.add(line[22:27])  # resSeq + iCode; element guard ("C"/empty) excludes calcium (CA)
     except Exception:
         return None
     return len(seen) or None
@@ -205,6 +205,8 @@ def check_status(job_id):
             'download_url': f'/download/{master_pdb_base}/{zip_filename}'
         })
     else:
+        if os.path.exists(os.path.join(master_result_dir, 'STOPPED')):
+            return jsonify({'status': 'Stopped', 'message': 'Job was stopped.'})
         if os.path.exists(master_result_dir):
             return jsonify({'status': 'Processing', 'message': 'Job is running iterations...'})
         return jsonify({'status': 'Pending/Failed', 'message': 'Job failed to start.'})
@@ -383,6 +385,8 @@ def stop_job(job_id):
 
 @predPEP.route('/download/<master_dir_name>/<filename>')
 def download_file(master_dir_name, filename):
+    if '/' in master_dir_name or '..' in master_dir_name:
+        return jsonify({'success': False, 'error': 'Invalid path.'}), 403
     return send_from_directory(os.path.join(BASE_RESULT_FOLDER, master_dir_name), filename, as_attachment=True)
 
 #if __name__ == '__main__':

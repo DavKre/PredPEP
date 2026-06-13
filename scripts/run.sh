@@ -23,6 +23,8 @@ fi
 docker run -d \
   --name "${CONTAINER}" \
   -v predpep_data:/tmp/pepspec \
+  --log-opt max-size=10m --log-opt max-file=3 \
+  --pids-limit 4096 \
   -p 6363:6363 \
   --restart unless-stopped \
   "${IMAGE}"

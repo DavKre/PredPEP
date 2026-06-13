@@ -10,6 +10,12 @@ services:
     volumes:
       - predpep_data:/tmp/pepspec
     restart: unless-stopped
+    pids_limit: 4096
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   predpep_data:

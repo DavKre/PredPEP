@@ -30,6 +30,8 @@ fi
 docker run -d \
   --name "${CONTAINER}" \
   -v predpep_data:/tmp/pepspec \
+  --log-opt max-size=10m --log-opt max-file=3 \
+  --pids-limit 4096 \
   -p "${HOST_PORT}:6363" \
   -v "${ROOT}/app:/opt/sp-predPEP" \
   -v "${ROOT}/pipeline:/usr/local/pepspec_pipe" \

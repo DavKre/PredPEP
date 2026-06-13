@@ -52,6 +52,13 @@ RUN --mount=type=bind,source=./blobs,target=/tmp/blobs,readonly \
  && find "$R/main/tools"  -mindepth 1 -maxdepth 1 ! -name protein_tools -exec rm -rf {} + \
  && find "$R/main"        -mindepth 1 -maxdepth 1 ! -name database ! -name source ! -name tools -exec rm -rf {} +
 
+# Fail the build if the Rosetta prune dropped anything the pipeline needs at runtime.
+RUN R=/usr/local/rosetta_pkgs/rosetta.binary.ubuntu.release-408 \
+ && test -f "$R/main/source/build/src/release/linux/5.4/64/x86/gcc/7/static/pepspec.static.linuxgccrelease" \
+ && test -d "$R/main/database" \
+ && test -f "$R/main/tools/protein_tools/scripts/clean_pdb.py" \
+ && echo "OK: Rosetta prune kept pepspec binary + database + protein_tools."
+
 # ---- 4. Pipeline scripts + /usr/local/bin symlinks --------------------------
 # Use bash for the remaining RUN / shell-form instructions so `shopt -s
 # nullglob` is available — protects the symlink loop from silently running
@@ -94,7 +101,7 @@ CMD ["/home/spacepep/miniforge3/envs/predPEP/bin/gunicorn", \
      "--worker-class=gevent", \
      "--timeout", "0", \
      "--capture-output", \
-     "--log-level", "debug", \
+     "--log-level", "info", \
      "--access-logfile", "-", \
      "--error-logfile", "-", \
      "predPEP:predPEP"]

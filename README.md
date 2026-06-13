@@ -36,6 +36,13 @@ A **Jobs** tab lists every job on the machine (date, submission details, status,
 - `/` serves the UI; `/health` returns JSON (`{"service":"predpep-node","status":"ok"}`) for liveness checks — used by DDN and the Docker healthcheck.
 - The **TMAP tree tab is non-functional** by design (see [Known limitations](#known-limitations)) — matches production.
 
+## Tuning & reliability (env vars on `scripts/run.sh`)
+
+- `PREDPEP_CORE_BUDGET` — max CPU cores the node will commit across running jobs (default: the machine's core count). Web-submitted jobs reserve their CPU count and queue when the budget is full.
+- `PREDPEP_RETENTION_BYTES` / `PREDPEP_RETENTION_DAYS` — job-storage caps (default 50 GB / 180 days). Oldest finished jobs are evicted first; completed jobs keep only their result `.zip`.
+- `PREDPEP_MEMORY` — optional Docker memory cap (e.g. `PREDPEP_MEMORY=32g`), passed to `--memory`.
+- **Auto-heal:** the gunicorn worker preloads the app to avoid the fork-time boot wedge; for an unattended fleet, also run a restarter that reacts to `health=unhealthy` (e.g. the `willfarrell/autoheal` sidecar, or have DDN `docker restart` a node whose `/health` fails).
+
 ## Code iteration
 
 ```

@@ -7,10 +7,10 @@ import uuid
 import re
 import glob
 import json
-import signal
 from datetime import datetime, timezone
 import pandas as pd
 from flask import Flask, request, render_template, send_from_directory, jsonify
+import scheduler
 from werkzeug.utils import secure_filename
 
 # Import TMAP logic from the local utility
@@ -23,6 +23,10 @@ except ImportError:
     def generate_tmap_coordinates(seqs): return [], [], [], [], []
 
 predPEP = Flask(__name__)
+
+@predPEP.before_request
+def _ensure_scheduler():
+    scheduler.start_scheduler()  # idempotent; starts in the worker on first request
 
 # Base directories for temporary files
 BASE_UPLOAD_FOLDER = '/tmp/pepspec/uploads'
@@ -71,16 +75,6 @@ def count_peptide_residues(pdb_path):
         return None
     return len(seen) or None
 
-def _kill_job(jdir):
-    """SIGKILL the job's manager process group (manager + its bash/Rosetta children). Best-effort."""
-    try:
-        with open(os.path.join(jdir, 'manager.pid')) as f:
-            pid = int(f.read().strip())
-        os.killpg(os.getpgid(pid), signal.SIGKILL)
-        return True
-    except (FileNotFoundError, ProcessLookupError, ValueError, PermissionError):
-        return False
-
 # ----------------------------------------------------------------------
 # ## 🌐 Flask Routes
 # ----------------------------------------------------------------------
@@ -112,7 +106,7 @@ def upload_file():
         return jsonify({'success': False, 'error': 'No selected file'}), 400
 
     try:
-        cpus = max(2, min(32, int(request.form.get('cpus', '8'))))
+        cpus = max(2, min(32, scheduler.CORE_BUDGET, int(request.form.get('cpus', '8'))))
     except (TypeError, ValueError):
         cpus = 8
     cpus = str(cpus)  # downstream Popen expects a string in the argv list
@@ -143,7 +137,17 @@ def upload_file():
     except Exception as e:
         return jsonify({'success': False, 'error': f'Failed to save file: {e}'})
 
-    # Persist submission metadata for the Jobs list (survives on the volume)
+    if not os.path.exists(MANAGER_SCRIPT_PATH) or not os.access(MANAGER_SCRIPT_PATH, os.X_OK):
+        return jsonify({'success': False, 'error': 'Manager script not found/executable.'})
+
+    manager_command = [
+        PYTHON_EXECUTABLE, MANAGER_SCRIPT_PATH,
+        filepath, master_result_folder, cpus,
+        job_folder_name, master_result_folder, job_folder_name
+    ]
+
+    # Persist submission metadata (status=queued); the scheduler launches the manager
+    # when cores are free and owns the status field from here on.
     try:
         with open(os.path.join(master_result_folder, 'job.json'), 'w') as jf:
             json.dump({
@@ -154,42 +158,26 @@ def upload_file():
                 'cpus': int(cpus),
                 'pdb_filename': new_filename,
                 'peptide_length': count_peptide_residues(filepath),
+                'status': 'queued',
             }, jf)
     except Exception as e:
         predPEP.logger.warning(f"[submit] could not write job.json: {e}")
 
-    # 4. LAUNCH ASYNCHRONOUS ITERATIVE MANAGER
     try:
-        if not os.path.exists(MANAGER_SCRIPT_PATH) or not os.access(MANAGER_SCRIPT_PATH, os.X_OK):
-            return jsonify({'success': False, 'error': 'Manager script not found/executable.'})
-
-        # MODIFIED: Last argument passed as job_folder_name instead of new_pdb_base
-        # GEÄNDERT: Letztes Argument als job_folder_name anstelle von new_pdb_base übergeben
-        manager_command = [
-            PYTHON_EXECUTABLE, MANAGER_SCRIPT_PATH,
-            filepath, master_result_folder, cpus, 
-            job_folder_name, master_result_folder, job_folder_name
-        ]
-
-        proc = subprocess.Popen(
-            manager_command, close_fds=True, start_new_session=True,
-            stdout=open(os.path.join(master_result_folder, f'{job_folder_name}_manager_stdout.log'), 'w'),
-            stderr=open(os.path.join(master_result_folder, f'{job_folder_name}_manager_stderr.log'), 'w')
-        )
-        try:
-            with open(os.path.join(master_result_folder, 'manager.pid'), 'w') as pf:
-                pf.write(str(proc.pid))
-        except Exception as e:
-            predPEP.logger.warning(f"[submit] could not write manager.pid: {e}")
-
-        return jsonify({
-            'success': True,
-            'message': f'Job submitted for {new_pdb_base} (ID: {job_folder_name}).',
-            'job_id': job_folder_name
-        })
-
+        ahead = scheduler.enqueue(job_folder_name, manager_command, int(cpus))
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({'success': False, 'error': f'Failed to queue job: {e}'})
+
+    state = scheduler.get_state()
+    placed = 'running' if ahead == 0 and state['available_cores'] >= int(cpus) else 'queued'
+    return jsonify({
+        'success': True,
+        'job_id': job_folder_name,
+        'status': placed,
+        'queue_position': ahead,
+        'message': (f'Job {job_folder_name} running.' if placed == 'running'
+                    else f'Job {job_folder_name} queued ({ahead} ahead).'),
+    })
 
 @predPEP.route('/status/<job_id>', methods=['GET'])
 def check_status(job_id):
@@ -205,10 +193,10 @@ def check_status(job_id):
             'download_url': f'/download/{master_pdb_base}/{zip_filename}'
         })
     else:
-        if os.path.exists(os.path.join(master_result_dir, 'STOPPED')):
-            return jsonify({'status': 'Stopped', 'message': 'Job was stopped.'})
         if os.path.exists(master_result_dir):
-            return jsonify({'status': 'Processing', 'message': 'Job is running iterations...'})
+            disp, dl = _display_status(master_result_dir, master_pdb_base)
+            return jsonify({'status': disp, 'download_url': dl,
+                            'message': f'Job {disp.lower()}.'})
         return jsonify({'status': 'Pending/Failed', 'message': 'Job failed to start.'})
 
 @predPEP.route('/results_data/<job_id>', methods=['GET'])
@@ -314,6 +302,30 @@ def get_tmap_tree(job_id):
         print(f"TMAP Tree Error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+_STATUS_DISPLAY = {'queued': 'Queued', 'running': 'Running', 'complete': 'Complete',
+                   'stopped': 'Stopped', 'failed': 'Failed'}
+
+def _display_status(jdir, entry):
+    """Return (display_status, download_url) from job.json status (scheduler-owned),
+    falling back to filesystem markers for any job without a status field."""
+    raw = None
+    try:
+        with open(os.path.join(jdir, 'job.json')) as f:
+            raw = json.load(f).get('status')
+    except Exception:
+        raw = None
+    if raw is None:
+        if os.path.exists(os.path.join(jdir, f"{entry}.zip")):
+            raw = 'complete'
+        elif os.path.exists(os.path.join(jdir, 'STOPPED')):
+            raw = 'stopped'
+        else:
+            raw = 'running'
+    disp = _STATUS_DISPLAY.get(raw, 'Running')
+    dl = f"/download/{entry}/{entry}.zip" if (raw == 'complete' and os.path.exists(os.path.join(jdir, f"{entry}.zip"))) else None
+    return disp, dl
+
+
 @predPEP.route('/jobs', methods=['GET'])
 def list_jobs():
     """List all jobs (newest first) with derived status — no auth, all jobs visible."""
@@ -332,15 +344,7 @@ def list_jobs():
                 except Exception:
                     meta = {}
             meta.setdefault('job_id', entry)
-            if os.path.exists(os.path.join(jdir, f"{entry}.zip")):
-                meta['status'] = 'Complete'
-                meta['download_url'] = f"/download/{entry}/{entry}.zip"
-            elif os.path.exists(os.path.join(jdir, 'STOPPED')):
-                meta['status'] = 'Stopped'
-                meta['download_url'] = None
-            else:
-                meta['status'] = 'Processing'
-                meta['download_url'] = None
+            meta['status'], meta['download_url'] = _display_status(jdir, entry)
             jobs.append(meta)
         jobs.sort(key=lambda j: j.get('submitted_at', ''), reverse=True)
         return jsonify({'success': True, 'jobs': jobs})
@@ -355,7 +359,7 @@ def delete_job(job_id):
     """Delete a job's result + upload dirs (reclaims disk). No auth."""
     if '/' in job_id or '..' in job_id or job_id in ('', '.', '..'):
         return jsonify({'success': False, 'error': 'Invalid job id.'}), 400
-    _kill_job(os.path.join(BASE_RESULT_FOLDER, job_id))
+    scheduler.cancel(job_id)
     removed = []
     for base in (BASE_RESULT_FOLDER, BASE_UPLOAD_FOLDER):
         d = os.path.join(base, job_id)
@@ -375,12 +379,14 @@ def stop_job(job_id):
     jdir = os.path.join(BASE_RESULT_FOLDER, job_id)
     if not os.path.isdir(jdir):
         return jsonify({'success': False, 'error': 'Job not found.'}), 404
-    killed = _kill_job(jdir)
-    try:
-        open(os.path.join(jdir, 'STOPPED'), 'w').close()
-    except Exception:
-        pass
-    return jsonify({'success': True, 'stopped': job_id, 'killed': killed})
+    scheduler.cancel(job_id)
+    return jsonify({'success': True, 'stopped': job_id})
+
+
+@predPEP.route('/state', methods=['GET'])
+def node_state():
+    """Capacity + disk for DDN dispatch and the UI bar."""
+    return jsonify(scheduler.get_state())
 
 
 @predPEP.route('/download/<master_dir_name>/<filename>')

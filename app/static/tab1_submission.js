@@ -16,6 +16,7 @@ function countChainBResidues(pdbText) {
         const rec = line.slice(0, 6);
         if (!rec.startsWith('ATOM') && !rec.startsWith('HETATM')) continue;
         if (line.slice(12, 16).trim() !== 'CA') continue;
+        if (!['C', ''].includes(line.slice(76, 78).trim())) continue; // element guard: exclude calcium (CA)
         if (line[21] !== 'B') continue;
         seen.add(line.slice(22, 27)); // resSeq (22-25) + iCode (26)
     }
@@ -94,6 +95,11 @@ window.initializeNGLTab1Viewer = function() {
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
+
+        if (file.size > 25 * 1024 * 1024) {
+            const m = document.getElementById('message');
+            if (m) { m.textContent = `Large file (${(file.size / 1048576).toFixed(0)} MB) — upload may be slow; PDBs are usually < 1 MB.`; m.style.color = '#b06000'; }
+        }
 
         const reader = new FileReader();
         reader.onload = function(event) {

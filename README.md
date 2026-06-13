@@ -32,7 +32,7 @@ The node serves the original browser interface at **http://&lt;host&gt;:6363/** 
 
 A **Jobs** tab lists every job on the machine (date, submission details, status, a download link, and a delete button) — persisted on a Docker volume so they survive page reloads and container restarts. Deleting a job removes its files from disk (use it to reclaim space). No login: all jobs are visible to anyone who can reach the node.
 
-- **The browser needs internet access.** The viewer libraries (NGL, Plotly) are loaded from public CDNs (`cdn.jsdelivr.net`, `cdn.plot.ly`); only the small app scripts are served locally. The backend itself (job execution) does **not** need internet.
+- **The browser needs internet access.** The page loads NGL + Plotly from public CDNs (`cdn.jsdelivr.net`, `cdn.plot.ly`); only the small app scripts (plus a vendored `static/js/ngl.umd.js`, currently unused) are served locally. The backend itself (job execution) does **not** need internet.
 - `/` serves the UI; `/health` returns JSON (`{"service":"predpep-node","status":"ok"}`) for liveness checks — used by DDN and the Docker healthcheck.
 - The **TMAP tree tab is non-functional** by design (see [Known limitations](#known-limitations)) — matches production.
 

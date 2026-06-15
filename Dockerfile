@@ -103,7 +103,12 @@ RUN chmod +x /usr/local/pepspec_pipe/*.sh /usr/local/pepspec_pipe/*.py \
 COPY --chown=${USER_UID}:${USER_GID} app/ /opt/sp-predPEP/
 
 # ---- 6. Runtime configuration ----------------------------------------------
-ENV HOME=/home/spacepep \
+# Node version stamped at build time: scripts/build.sh passes
+# --build-arg VERSION="$(cat VERSION)"; predPEP.py surfaces it in /state + /health.
+# Declared here (last, most-volatile) so a version bump only rebuilds the tail layers.
+ARG VERSION=dev
+ENV PREDPEP_VERSION=${VERSION} \
+    HOME=/home/spacepep \
     FLASK_APP=predPEP.py \
     PATH=/home/spacepep/miniforge3/envs/predPEP/bin:/home/spacepep/miniforge3/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 

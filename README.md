@@ -20,7 +20,7 @@ Takes ~5–10 min on a fresh build (Rosetta tar extraction is the bottleneck). F
 
 ## Versioning
 
-The image version lives in the **`VERSION`** file (currently `v1.1.0`) — the single source of truth. `./scripts/build.sh` tags the build `predpep:$(cat VERSION)` **and** `predpep:latest`; `run.sh` / `run-dev.sh` launch the versioned tag. To cut a new release, bump `VERSION` (and the `image:` pin in `docker-compose.yml`), rebuild, and re-export the tarball. Commands below hard-code `v1.1.0`; substitute the current version.
+The image version lives in the **`VERSION`** file (currently `v1.2.0`) — the single source of truth. `./scripts/build.sh` tags the build `predpep:$(cat VERSION)` **and** `predpep:latest`; `run.sh` / `run-dev.sh` launch the versioned tag. To cut a new release, bump `VERSION` (and the `image:` pin in `docker-compose.yml`), rebuild, and re-export the tarball. Commands below hard-code `v1.2.0`; substitute the current version.
 
 ## Daily use
 
@@ -82,20 +82,20 @@ Compose and `run.sh` both create a container named `predpep_app` on port 6363 �
 
 ## Distributing the image (deploying machine-by-machine)
 
-The built image is self-contained (~4.8 GB) — to roll it out to other machines without each one rebuilding (or needing the build-time tool blobs), copy the image directly. `predpep:v1.1.0` already includes everything (scheduler, UI, all fixes); no rebuild is needed on the source machine.
+The built image is self-contained (~4.8 GB) — to roll it out to other machines without each one rebuilding (or needing the build-time tool blobs), copy the image directly. `predpep:v1.2.0` already includes everything (scheduler, UI, all fixes); no rebuild is needed on the source machine.
 
 **Over SSH, no temp files (simplest):**
 
 ```
-docker save predpep:v1.1.0 | gzip | ssh USER@TARGET 'gunzip | docker load'
+docker save predpep:v1.2.0 | gzip | ssh USER@TARGET 'gunzip | docker load'
 ```
 
 **Or via a file with resume (better for flaky links):**
 
 ```
-docker save predpep:v1.1.0 | gzip > predpep-v1.1.0.tgz
-rsync -P predpep-v1.1.0.tgz USER@TARGET:        # -P = progress + resume
-ssh USER@TARGET 'docker load < predpep-v1.1.0.tgz && rm predpep-v1.1.0.tgz'
+docker save predpep:v1.2.0 | gzip > predpep-v1.2.0.tgz
+rsync -P predpep-v1.2.0.tgz USER@TARGET:        # -P = progress + resume
+ssh USER@TARGET 'docker load < predpep-v1.2.0.tgz && rm predpep-v1.2.0.tgz'
 ```
 
 Then launch the node on the target (the browser UI is baked in and served at `/`):
@@ -104,7 +104,7 @@ Then launch the node on the target (the browser UI is baked in and served at `/`
 docker run -d --name predpep_app \
   -v predpep_data:/tmp/pepspec \
   --log-opt max-size=10m --log-opt max-file=3 --pids-limit 4096 \
-  -p 6363:6363 --restart unless-stopped predpep:v1.1.0
+  -p 6363:6363 --restart unless-stopped predpep:v1.2.0
 ```
 
 The `-v predpep_data:/tmp/pepspec` volume is **required for jobs to persist** across restarts. Targets need only Docker (the SSH user must be able to run it) and ~7 GB free disk — no GPU, no build toolchain, no blobs. A private registry works too (`docker push`/`pull`). For the controller-side integration + control API, see [docs/INTEGRATION.md](docs/INTEGRATION.md).

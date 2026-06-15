@@ -22,6 +22,7 @@ VERSION="$(cat VERSION)"
 
 DOCKER_BUILDKIT=1 docker build \
   --progress=plain \
+  --build-arg VERSION="${VERSION}" \
   -t "predpep:${VERSION}" \
   -t predpep:latest \
   .

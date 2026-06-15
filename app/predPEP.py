@@ -24,6 +24,12 @@ except ImportError:
 
 predPEP = Flask(__name__)
 
+# Node software version, stamped into the image at build time (Dockerfile
+# ARG VERSION -> ENV PREDPEP_VERSION, sourced from the repo VERSION file by
+# scripts/build.sh). Surfaced in /state + /health so a controller/DDN can detect
+# out-of-date nodes.
+NODE_VERSION = os.environ.get('PREDPEP_VERSION', 'unknown')
+
 @predPEP.before_request
 def _ensure_scheduler():
     scheduler.start_scheduler()  # idempotent; starts in the worker on first request
@@ -87,7 +93,7 @@ def index():
 @predPEP.route('/health')
 def health():
     """Liveness probe for an orchestrator / the Docker healthcheck (JSON, no UI)."""
-    return jsonify({"service": "predpep-node", "status": "ok"})
+    return jsonify({"service": "predpep-node", "status": "ok", "version": NODE_VERSION})
 
 @predPEP.route('/upload', methods=['POST'])
 def upload_file():
@@ -386,7 +392,9 @@ def stop_job(job_id):
 @predPEP.route('/state', methods=['GET'])
 def node_state():
     """Capacity + disk for orchestrator dispatch and the UI bar."""
-    return jsonify(scheduler.get_state())
+    state = scheduler.get_state()
+    state['version'] = NODE_VERSION
+    return jsonify(state)
 
 
 @predPEP.route('/download/<master_dir_name>/<filename>')

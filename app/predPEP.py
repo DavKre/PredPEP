@@ -86,7 +86,7 @@ def index():
 
 @predPEP.route('/health')
 def health():
-    """Liveness probe for DDN / the Docker healthcheck (JSON, no UI)."""
+    """Liveness probe for an orchestrator / the Docker healthcheck (JSON, no UI)."""
     return jsonify({"service": "predpep-node", "status": "ok"})
 
 @predPEP.route('/upload', methods=['POST'])
@@ -385,7 +385,7 @@ def stop_job(job_id):
 
 @predPEP.route('/state', methods=['GET'])
 def node_state():
-    """Capacity + disk for DDN dispatch and the UI bar."""
+    """Capacity + disk for orchestrator dispatch and the UI bar."""
     return jsonify(scheduler.get_state())
 
 

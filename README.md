@@ -1,11 +1,11 @@
 # predPEP local
 
-Flask + gunicorn backend for peptide design, running Rosetta + FoldX pipelines (CPU-only). It serves a JSON API for programmatic/orchestrator use **and** the original browser UI, both on port 6363 (`/` = UI, `/health` = liveness). Rebuilt from artifacts extracted from the production image `predpep:v2`. For the extraction story, blob inventory, and historical context, see [HANDOFF.md](HANDOFF.md).
+Flask + gunicorn backend for peptide design, running Rosetta + FoldX pipelines (CPU-only). It serves a JSON API for programmatic/orchestrator use **and** the original browser UI, both on port 6363 (`/` = UI, `/health` = liveness). It ships as a self-contained Docker image with an in-process, CPU-aware job queue.
 
 ## Prerequisites
 
 - Docker 23+ (the Dockerfile uses `RUN --mount=type=bind`, which requires BuildKit — default in 23+)
-- Building needs ~50 GB free transiently (Rosetta is extracted in full, then pruned in the same layer); the **resulting image is ~8 GB**, so machines that only *run* a pre-built image need ~10 GB. Final size is printed at the end of `./scripts/build.sh`.
+- Building needs ~50 GB free transiently (Rosetta is extracted in full, then pruned in the same layer); the **resulting image is ~7.3 GB**, so machines that only *run* a pre-built image need ~10 GB. Final size is printed at the end of `./scripts/build.sh`.
 - Port 6363 free on the host
 
 CPU-only — no GPU, NVIDIA driver, or nvidia-container-toolkit required. Runs on any x86-64 Linux host with Docker.
@@ -34,7 +34,7 @@ A **Jobs** tab lists every job on the machine (date, submission details, status,
 
 - **The browser needs internet access.** The page loads NGL + Plotly from public CDNs (`cdn.jsdelivr.net`, `cdn.plot.ly`); only the small app scripts (plus a vendored `static/js/ngl.umd.js`, currently unused) are served locally. The backend itself (job execution) does **not** need internet.
 - `/` serves the UI; `/health` returns JSON (`{"service":"predpep-node","status":"ok"}`) for liveness checks — used by a controller and the Docker healthcheck.
-- The **TMAP tree tab is non-functional** by design (see [Known limitations](#known-limitations)) — matches production.
+- The **TMAP tree tab is non-functional** by design (see [Known limitations](#known-limitations)).
 
 ## Tuning & reliability (env vars on `scripts/run.sh`)
 
@@ -78,7 +78,7 @@ Compose and `run.sh` both create a container named `predpep_app` on port 6363 �
 
 ## Distributing the image (deploying machine-by-machine)
 
-The built image is self-contained (~7 GB) — to roll it out to other machines without each one rebuilding (or needing the 23 GB of blobs), copy the image directly. `predpep:local` already includes everything (scheduler, UI, all fixes); no rebuild is needed on the source machine.
+The built image is self-contained (~7.3 GB) — to roll it out to other machines without each one rebuilding (or needing the build-time tool blobs), copy the image directly. `predpep:local` already includes everything (scheduler, UI, all fixes); no rebuild is needed on the source machine.
 
 **Over SSH, no temp files (simplest):**
 
@@ -107,9 +107,8 @@ The `-v predpep_data:/tmp/pepspec` volume is **required for jobs to persist** ac
 
 ## Known limitations
 
-- **TMAP tree-view tab is non-functional by design.** `tmap_utils.py` requires the `mhfp` package, which isn't in the conda env. predPEP.py falls back to a no-op via `except ImportError`. Matches production behavior — the feature is not yet implemented.
+- **TMAP tree-view tab is non-functional by design.** `tmap_utils.py` requires the `mhfp` package, which isn't in the conda env. predPEP.py falls back to a no-op via `except ImportError`. The feature is not implemented.
 - **Job data persists on a Docker volume** (`predpep_data`, mounted at `/tmp/pepspec`). It survives container recreate/redeploy; back it up with `docker run --rm -v predpep_data:/data -v "$PWD":/backup busybox tar czf /backup/predpep_data.tgz -C /data .`. Removing the volume (`docker volume rm predpep_data`) erases all job history.
-- A job interrupted by a container restart shows **"Processing"** indefinitely (no run-state tracking yet); deleting a *running* job removes its files and its background run then fails. Both are resolved by the planned job-queue work.
 - **FoldX binary is bundled** at `/usr/local/foldx26Linux64_0/`. Covered by an academic license — do **not** publicly redistribute this image.
 - **Rosetta binaries are bundled** at `/usr/local/rosetta_pkgs/`. Same academic-license constraint.
 - The gevent worker needs a few seconds after container start to fork and import the Flask app. The Dockerfile healthcheck has `--start-period=90s` to cover this; the UI itself is typically serving within ~5 seconds.

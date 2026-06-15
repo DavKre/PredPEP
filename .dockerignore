@@ -1,6 +1,5 @@
 # Reference-only folders and docs — never needed inside the image.
 *.md
-HANDOFF
 docs
 usr_local_bin
 blobs/blobs.sha256

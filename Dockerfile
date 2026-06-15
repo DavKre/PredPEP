@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 #
-# predPEP local image — rebuilt from blobs extracted from the production container.
-# See HANDOFF.md for background and path constraints.
+# predPEP local image — Flask + gunicorn peptide-design node (Rosetta + FoldX, CPU-only).
+# Heavy tool blobs (Rosetta, FoldX, conda env) are provided alongside the repo under blobs/.
 #
 # Layers are ordered least-volatile (top) to most-volatile (bottom) so that
 # editing app code only invalidates the final few layers.
@@ -31,17 +31,39 @@ RUN groupadd --gid ${USER_GID} ${USER_NAME} \
 
 # ---- 3. Pre-built tool blobs ------------------------------------------------
 # Bind-mounted (not COPY'd) so the 23 GB of tarballs never enter any image
-# layer. Extraction + ownership fix + Rosetta prune happen in a single RUN so
-# there's one layer for all tools AND the 49 GB Rosetta tree never persists:
-# the pipeline only runs pepspec.static.linuxgccrelease (a 184 MB static binary)
-# with main/database, so we keep those + protein_tools/scripts and drop the rest
-# (~45 GB of other apps/variants/source/tests). See
-# docs/superpowers/specs/2026-06-12-phase2a2-rosetta-prune-design.md.
+# layer. Extraction + ownership fix + Rosetta prune + conda slim happen in a
+# single RUN so there's one layer for all tools AND the pruned bytes never
+# persist: the pipeline only runs pepspec.static.linuxgccrelease (a 184 MB
+# static binary) with main/database, so we keep those + protein_tools/scripts
+# and drop the rest (~45 GB of other apps/variants/source/tests).
+#
+# Conda slim (Tier 1, no science risk): keep only envs/predPEP. We drop
+#   (a) the pkgs/ download cache + base conda/mamba (~1.6 GB) — runtime invokes
+#       the env's gunicorn/python directly (see CMD) and the pipeline resolves
+#       tools via PATH; no `conda`/`mamba` call exists in app/ or pipeline/;
+#   (b) the dead TMAP feature (tmap/faerun) — libOGDF + mhfp are absent so
+#       `import tmap` always fails (caught by the try/except in predPEP.py) —
+#       plus the matplotlib -> pyside6 -> qt6 -> libllvm/libclang GUI tail it
+#       dragged in (~0.67 GB); the live path (flask/rdkit/numpy/pandas/gevent)
+#       needs none of it;
+#   (c) build-only cruft: *.a, cmake/, include/, pkgconfig/, package tests/.
 RUN --mount=type=bind,source=./blobs,target=/tmp/blobs,readonly \
     tar -xzf /tmp/blobs/rosetta.tar.gz    -C /usr/local/ \
  && tar -xzf /tmp/blobs/foldx.tar.gz      -C /usr/local/ \
  && tar -xzf /tmp/blobs/miniforge3.tar.gz -C /home/${USER_NAME}/ \
- && chown -R ${USER_UID}:${USER_GID} /home/${USER_NAME}/miniforge3 \
+ && MF=/home/${USER_NAME}/miniforge3 \
+ && E=$MF/envs/predPEP \
+ && SP=$E/lib/python3.10/site-packages \
+ && rm -rf $SP/matplotlib $SP/matplotlib-*.dist-info $SP/mpl_toolkits $SP/pylab.py \
+           $SP/PySide6 $SP/PySide6-*.dist-info $SP/shiboken6 $SP/shiboken6-*.dist-info \
+           $SP/tmap $SP/tmap-*.dist-info $SP/faerun $SP/faerun-*.dist-info \
+ && rm -rf $E/lib/qt6 $E/lib/libQt6* \
+           $E/lib/libLLVM.so* $E/lib/libLLVM-*.so $E/lib/libclang.so* $E/lib/libclang-cpp.so* \
+ && find $E -name '*.a' -delete \
+ && rm -rf $E/lib/cmake $E/include $E/lib/pkgconfig \
+ && find $E -type d -name tests -path '*/site-packages/*' -prune -exec rm -rf {} + \
+ && find $MF -mindepth 1 -maxdepth 1 ! -name envs -exec rm -rf {} + \
+ && chown -R ${USER_UID}:${USER_GID} $MF \
  && R=/usr/local/rosetta_pkgs/rosetta.binary.ubuntu.release-408 \
  && BINREL=main/source/build/src/release/linux/5.4/64/x86/gcc/7/static/pepspec.static.linuxgccrelease \
  && mv "$R/$BINREL" /tmp/pepspec.bin \
@@ -58,6 +80,10 @@ RUN R=/usr/local/rosetta_pkgs/rosetta.binary.ubuntu.release-408 \
  && test -d "$R/main/database" \
  && test -f "$R/main/tools/protein_tools/scripts/clean_pdb.py" \
  && echo "OK: Rosetta prune kept pepspec binary + database + protein_tools."
+
+# Fail the build if the conda slim dropped anything the live service imports.
+RUN /home/${USER_NAME}/miniforge3/envs/predPEP/bin/python -c \
+      "import flask, rdkit, numpy, pandas, gevent, gunicorn, werkzeug; print('OK: live deps import on slimmed env.')"
 
 # ---- 4. Pipeline scripts + /usr/local/bin symlinks --------------------------
 # Use bash for the remaining RUN / shell-form instructions so `shopt -s

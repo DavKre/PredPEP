@@ -1,4 +1,4 @@
-# --- Heavy, out-of-band assets (provided alongside the repo, see HANDOFF.md) ---
+# --- Heavy, out-of-band assets (provided alongside the repo) ---
 # Extracted tool blobs (~23 GB)
 blobs/*.tar.gz
 # Local test inputs copied out of the running container
@@ -16,3 +16,7 @@ usr_local_bin/
 old_scripts/
 **/*_bak*
 **/*.py3
+
+# Local image export from `docker save` (see README "Distributing the image")
+predpep-local.tgz
+*.tgz

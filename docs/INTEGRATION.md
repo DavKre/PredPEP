@@ -10,7 +10,7 @@ yet** (a deferred security phase) — see §8.
 
 ## 1. Model in one paragraph
 
-A **predPEP node** is a single self-contained Docker image (`predpep:local`, ~4.8 GB, CPU-only,
+A **predPEP node** is a single self-contained Docker image (`predpep:v1.1.0`, ~4.8 GB, CPU-only,
 `ubuntu:22.04` base) that runs a Flask/gunicorn service on **port 6363**. It accepts a
 peptide-design job (a PDB complex + parameters), runs a Rosetta + FoldX pipeline, and produces a
 result `.zip`. Each node is **autonomous**: it has its own CPU-aware queue, disk retention, and a
@@ -26,7 +26,7 @@ and be dispatched to like any other — just include its `host:6363` in the node
 **Image distribution** (no rebuild on targets, no blobs needed on targets):
 ```bash
 # from a machine that has the image — stream it over SSH, no temp files:
-docker save predpep:local | gzip | ssh USER@TARGET 'gunzip | docker load'
+docker save predpep:v1.1.0 | gzip | ssh USER@TARGET 'gunzip | docker load'
 ```
 (A private registry works too: `docker push`/`pull`. Do not push to a public registry — the image
 bundles academic-licensed Rosetta/FoldX.) See the README "Distributing the image" section for the
@@ -41,7 +41,7 @@ docker run -d --name predpep_app \
   --pids-limit 4096 \
   -p 6363:6363 \
   --restart unless-stopped \
-  predpep:local
+  predpep:v1.1.0
 ```
 - **Persistent volume `predpep_data:/tmp/pepspec`** holds all jobs (metadata, results, zips). It
   **survives container recreate/redeploy** — each machine keeps its own job history.
@@ -50,8 +50,8 @@ docker run -d --name predpep_app \
 
 **Update a node to a new image version** (jobs preserved via the volume):
 ```bash
-docker load < predpep-image.tgz                 # or registry pull
-docker rm -f predpep_app && docker run -d ... predpep:local   # volume re-attaches, jobs persist
+docker load < predpep-v1.1.0.tgz                 # or registry pull
+docker rm -f predpep_app && docker run -d ... predpep:v1.1.0   # volume re-attaches, jobs persist
 ```
 On restart the node **reconciles** its state from the volume (see §4).
 

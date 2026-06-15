@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 
-IMAGE=predpep:local
+IMAGE="predpep:$(cat "$ROOT/VERSION")"
 CONTAINER=predpep_app_dev
 HOST_PORT="${HOST_PORT:-6363}"
 

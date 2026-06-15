@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Launch predpep_app for production-ish use (detached, GPU, restart=unless-stopped).
-# Assumes ./scripts/build.sh has produced predpep:local.
+# Assumes ./scripts/build.sh has produced the image for the version in ./VERSION.
 
 set -euo pipefail
 
-IMAGE=predpep:local
+IMAGE="predpep:$(cat "$(dirname "$0")/../VERSION")"
 CONTAINER=predpep_app
 
 if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then

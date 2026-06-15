@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the predpep:local image.
+# Build the predpep:<version> image (version read from ./VERSION), also tagging :latest.
 #
 # The Dockerfile uses `RUN --mount=type=bind` to extract blobs without copying
 # them into an image layer — this requires BuildKit. BuildKit is the default in
@@ -18,7 +18,12 @@ if [ "${CHECK_BLOBS:-0}" = "1" ] && [ -f blobs/blobs.sha256 ]; then
   ( cd blobs && sha256sum -c blobs.sha256 ) || { echo "ERROR: blob checksum mismatch." >&2; exit 1; }
 fi
 
+VERSION="$(cat VERSION)"
+
 DOCKER_BUILDKIT=1 docker build \
   --progress=plain \
-  -t predpep:local \
+  -t "predpep:${VERSION}" \
+  -t predpep:latest \
   .
+
+echo "Built predpep:${VERSION} (also tagged predpep:latest)."

@@ -24,5 +24,5 @@ old_scripts/
 **/*.py3
 
 # Image export from `docker save` (see README "Distributing the image")
-predpep-image.tgz
+predpep-*.tgz
 *.tgz

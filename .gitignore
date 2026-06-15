@@ -4,6 +4,12 @@ blobs/*.tar.gz
 # Local test inputs copied out of the running container
 testdata/
 
+# --- Claude Code / AI agent local config (not part of the app) ---
+.claude/
+CLAUDE.local.md
+.aider*
+.cursor/
+
 # --- Build / runtime artifacts ---
 *.log
 

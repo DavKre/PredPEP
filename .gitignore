@@ -23,6 +23,6 @@ old_scripts/
 **/*_bak*
 **/*.py3
 
-# Local image export from `docker save` (see README "Distributing the image")
-predpep-local.tgz
+# Image export from `docker save` (see README "Distributing the image")
+predpep-image.tgz
 *.tgz

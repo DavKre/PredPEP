@@ -10,7 +10,7 @@ yet** (a deferred security phase) — see §8.
 
 ## 1. Model in one paragraph
 
-A **predPEP node** is a single self-contained Docker image (`predpep:local`, ~7 GB, CPU-only,
+A **predPEP node** is a single self-contained Docker image (`predpep:local`, ~4.8 GB, CPU-only,
 `ubuntu:22.04` base) that runs a Flask/gunicorn service on **port 6363**. It accepts a
 peptide-design job (a PDB complex + parameters), runs a Rosetta + FoldX pipeline, and produces a
 result `.zip`. Each node is **autonomous**: it has its own CPU-aware queue, disk retention, and a
@@ -50,7 +50,7 @@ docker run -d --name predpep_app \
 
 **Update a node to a new image version** (jobs preserved via the volume):
 ```bash
-docker load < predpep-local-NEW.tgz             # or registry pull
+docker load < predpep-image.tgz                 # or registry pull
 docker rm -f predpep_app && docker run -d ... predpep:local   # volume re-attaches, jobs persist
 ```
 On restart the node **reconciles** its state from the volume (see §4).
@@ -144,7 +144,7 @@ Both validate the id (reject `/`, `..`); `404` if unknown.
 ### UI-only / deprecated (a controller can ignore)
 `GET /results_data/<job_id>` (FoldX/Rosetta CSV+text for the browser viewer),
 `GET /stream_final_pdb/<job_id>/<path>` (PDB streaming for the viewer),
-`GET /get_tmap_tree/<job_id>` (**non-functional** — `mhfp` not in the env; returns empty).
+`GET /get_tmap_tree/<job_id>` (**non-functional** — `tmap`/`mhfp` not in the env; returns empty).
 
 ---
 

@@ -5,7 +5,7 @@ Flask + gunicorn backend for peptide design, running Rosetta + FoldX pipelines (
 ## Prerequisites
 
 - Docker 23+ (the Dockerfile uses `RUN --mount=type=bind`, which requires BuildKit — default in 23+)
-- Building needs ~50 GB free transiently (Rosetta is extracted in full, then pruned in the same layer); the **resulting image is ~7.3 GB**, so machines that only *run* a pre-built image need ~10 GB. Final size is printed at the end of `./scripts/build.sh`.
+- Building needs ~50 GB free transiently (Rosetta is extracted in full, then pruned in the same layer); the **resulting image is ~4.8 GB**, so machines that only *run* a pre-built image need ~7 GB. Final size is printed at the end of `./scripts/build.sh`.
 - Port 6363 free on the host
 
 CPU-only — no GPU, NVIDIA driver, or nvidia-container-toolkit required. Runs on any x86-64 Linux host with Docker.
@@ -78,7 +78,7 @@ Compose and `run.sh` both create a container named `predpep_app` on port 6363 �
 
 ## Distributing the image (deploying machine-by-machine)
 
-The built image is self-contained (~7.3 GB) — to roll it out to other machines without each one rebuilding (or needing the build-time tool blobs), copy the image directly. `predpep:local` already includes everything (scheduler, UI, all fixes); no rebuild is needed on the source machine.
+The built image is self-contained (~4.8 GB) — to roll it out to other machines without each one rebuilding (or needing the build-time tool blobs), copy the image directly. `predpep:local` already includes everything (scheduler, UI, all fixes); no rebuild is needed on the source machine.
 
 **Over SSH, no temp files (simplest):**
 
@@ -89,9 +89,9 @@ docker save predpep:local | gzip | ssh USER@TARGET 'gunzip | docker load'
 **Or via a file with resume (better for flaky links):**
 
 ```
-docker save predpep:local | gzip > predpep-local.tgz
-rsync -P predpep-local.tgz USER@TARGET:        # -P = progress + resume
-ssh USER@TARGET 'docker load < predpep-local.tgz && rm predpep-local.tgz'
+docker save predpep:local | gzip > predpep-image.tgz
+rsync -P predpep-image.tgz USER@TARGET:        # -P = progress + resume
+ssh USER@TARGET 'docker load < predpep-image.tgz && rm predpep-image.tgz'
 ```
 
 Then launch the node on the target (the browser UI is baked in and served at `/`):
@@ -103,11 +103,11 @@ docker run -d --name predpep_app \
   -p 6363:6363 --restart unless-stopped predpep:local
 ```
 
-The `-v predpep_data:/tmp/pepspec` volume is **required for jobs to persist** across restarts. Targets need only Docker (the SSH user must be able to run it) and ~10 GB free disk — no GPU, no build toolchain, no blobs. A private registry works too (`docker push`/`pull`). For the controller-side integration + control API, see [docs/INTEGRATION.md](docs/INTEGRATION.md).
+The `-v predpep_data:/tmp/pepspec` volume is **required for jobs to persist** across restarts. Targets need only Docker (the SSH user must be able to run it) and ~7 GB free disk — no GPU, no build toolchain, no blobs. A private registry works too (`docker push`/`pull`). For the controller-side integration + control API, see [docs/INTEGRATION.md](docs/INTEGRATION.md).
 
 ## Known limitations
 
-- **TMAP tree-view tab is non-functional by design.** `tmap_utils.py` requires the `mhfp` package, which isn't in the conda env. predPEP.py falls back to a no-op via `except ImportError`. The feature is not implemented.
+- **TMAP tree-view tab is non-functional by design.** `tmap_utils.py` needs `mhfp` plus a working `tmap`/`libOGDF`, none of which are present; predPEP.py falls back to a no-op via `except ImportError`. The slim image goes further and **drops `tmap`/`faerun` and their matplotlib GUI/LLVM backend entirely** (~0.64 GB saved), so the feature is not implemented.
 - **Job data persists on a Docker volume** (`predpep_data`, mounted at `/tmp/pepspec`). It survives container recreate/redeploy; back it up with `docker run --rm -v predpep_data:/data -v "$PWD":/backup busybox tar czf /backup/predpep_data.tgz -C /data .`. Removing the volume (`docker volume rm predpep_data`) erases all job history.
 - **FoldX binary is bundled** at `/usr/local/foldx26Linux64_0/`. Covered by an academic license — do **not** publicly redistribute this image.
 - **Rosetta binaries are bundled** at `/usr/local/rosetta_pkgs/`. Same academic-license constraint.

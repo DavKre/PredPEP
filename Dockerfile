@@ -43,9 +43,9 @@ RUN groupadd --gid ${USER_GID} ${USER_NAME} \
 #       tools via PATH; no `conda`/`mamba` call exists in app/ or pipeline/;
 #   (b) the dead TMAP feature (tmap/faerun) — libOGDF + mhfp are absent so
 #       `import tmap` always fails (caught by the try/except in predPEP.py) —
-#       plus the matplotlib -> pyside6 -> qt6 -> libllvm/libclang GUI tail it
-#       dragged in (~0.67 GB); the live path (flask/rdkit/numpy/pandas/gevent)
-#       needs none of it;
+#       plus the GUI backend it dragged in: pyside6 -> qt6 -> libllvm/libclang
+#       (~0.64 GB). matplotlib itself is KEPT (the pipeline's run_anaSCORES.py
+#       imports it) but runs headless on the Agg backend, so no Qt is needed;
 #   (c) build-only cruft: *.a, cmake/, include/, pkgconfig/, package tests/.
 RUN --mount=type=bind,source=./blobs,target=/tmp/blobs,readonly \
     tar -xzf /tmp/blobs/rosetta.tar.gz    -C /usr/local/ \
@@ -54,8 +54,7 @@ RUN --mount=type=bind,source=./blobs,target=/tmp/blobs,readonly \
  && MF=/home/${USER_NAME}/miniforge3 \
  && E=$MF/envs/predPEP \
  && SP=$E/lib/python3.10/site-packages \
- && rm -rf $SP/matplotlib $SP/matplotlib-*.dist-info $SP/mpl_toolkits $SP/pylab.py \
-           $SP/PySide6 $SP/PySide6-*.dist-info $SP/shiboken6 $SP/shiboken6-*.dist-info \
+ && rm -rf $SP/PySide6 $SP/PySide6-*.dist-info $SP/shiboken6 $SP/shiboken6-*.dist-info \
            $SP/tmap $SP/tmap-*.dist-info $SP/faerun $SP/faerun-*.dist-info \
  && rm -rf $E/lib/qt6 $E/lib/libQt6* \
            $E/lib/libLLVM.so* $E/lib/libLLVM-*.so $E/lib/libclang.so* $E/lib/libclang-cpp.so* \
@@ -83,7 +82,7 @@ RUN R=/usr/local/rosetta_pkgs/rosetta.binary.ubuntu.release-408 \
 
 # Fail the build if the conda slim dropped anything the live service imports.
 RUN /home/${USER_NAME}/miniforge3/envs/predPEP/bin/python -c \
-      "import flask, rdkit, numpy, pandas, gevent, gunicorn, werkzeug; print('OK: live deps import on slimmed env.')"
+      "import flask, rdkit, numpy, pandas, gevent, gunicorn, werkzeug, matplotlib.pyplot, mpl_toolkits.mplot3d; print('OK: live deps import on slimmed env.')"
 
 # ---- 4. Pipeline scripts + /usr/local/bin symlinks --------------------------
 # Use bash for the remaining RUN / shell-form instructions so `shopt -s

@@ -30,8 +30,7 @@ docker save predpep:local | gzip | ssh USER@TARGET 'gunzip | docker load'
 ```
 (A private registry works too: `docker push`/`pull`. Do not push to a public registry — the image
 bundles academic-licensed Rosetta/FoldX.) See the README "Distributing the image" section for the
-resumable-via-file variant, and [deploy-agent-prompt.md](deploy-agent-prompt.md) for a guided,
-self-verifying per-machine deploy.
+resumable-via-file variant.
 
 **Run a node** (this is what `scripts/run.sh` does):
 ```bash

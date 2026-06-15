@@ -103,7 +103,7 @@ docker run -d --name predpep_app \
   -p 6363:6363 --restart unless-stopped predpep:local
 ```
 
-The `-v predpep_data:/tmp/pepspec` volume is **required for jobs to persist** across restarts. Targets need only Docker (the SSH user must be able to run it) and ~10 GB free disk — no GPU, no build toolchain, no blobs. A private registry works too (`docker push`/`pull`). For a guided, self-verifying deploy on each machine, hand an agent the prompt in [docs/deploy-agent-prompt.md](docs/deploy-agent-prompt.md). For the controller-side integration + control API, see [docs/INTEGRATION.md](docs/INTEGRATION.md).
+The `-v predpep_data:/tmp/pepspec` volume is **required for jobs to persist** across restarts. Targets need only Docker (the SSH user must be able to run it) and ~10 GB free disk — no GPU, no build toolchain, no blobs. A private registry works too (`docker push`/`pull`). For the controller-side integration + control API, see [docs/INTEGRATION.md](docs/INTEGRATION.md).
 
 ## Known limitations
 

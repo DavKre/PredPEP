@@ -1,6 +1,6 @@
 # predPEP local
 
-Flask + gunicorn backend for peptide design, running Rosetta + FoldX pipelines (CPU-only). It serves a JSON API for programmatic/DDN use **and** the original browser UI, both on port 6363 (`/` = UI, `/health` = liveness). Rebuilt from artifacts extracted from the production image `predpep:v2`. For the extraction story, blob inventory, and historical context, see [HANDOFF.md](HANDOFF.md).
+Flask + gunicorn backend for peptide design, running Rosetta + FoldX pipelines (CPU-only). It serves a JSON API for programmatic/orchestrator use **and** the original browser UI, both on port 6363 (`/` = UI, `/health` = liveness). Rebuilt from artifacts extracted from the production image `predpep:v2`. For the extraction story, blob inventory, and historical context, see [HANDOFF.md](HANDOFF.md).
 
 ## Prerequisites
 
@@ -33,7 +33,7 @@ The node serves the original browser interface at **http://&lt;host&gt;:6363/** 
 A **Jobs** tab lists every job on the machine (date, submission details, status, a download link, and a delete button) — persisted on a Docker volume so they survive page reloads and container restarts. Deleting a job removes its files from disk (use it to reclaim space). No login: all jobs are visible to anyone who can reach the node.
 
 - **The browser needs internet access.** The page loads NGL + Plotly from public CDNs (`cdn.jsdelivr.net`, `cdn.plot.ly`); only the small app scripts (plus a vendored `static/js/ngl.umd.js`, currently unused) are served locally. The backend itself (job execution) does **not** need internet.
-- `/` serves the UI; `/health` returns JSON (`{"service":"predpep-node","status":"ok"}`) for liveness checks — used by DDN and the Docker healthcheck.
+- `/` serves the UI; `/health` returns JSON (`{"service":"predpep-node","status":"ok"}`) for liveness checks — used by a controller and the Docker healthcheck.
 - The **TMAP tree tab is non-functional** by design (see [Known limitations](#known-limitations)) — matches production.
 
 ## Tuning & reliability (env vars on `scripts/run.sh`)
@@ -41,7 +41,7 @@ A **Jobs** tab lists every job on the machine (date, submission details, status,
 - `PREDPEP_CORE_BUDGET` — max CPU cores the node will commit across running jobs (default: the machine's core count). Web-submitted jobs reserve their CPU count and queue when the budget is full.
 - `PREDPEP_RETENTION_BYTES` / `PREDPEP_RETENTION_DAYS` — job-storage caps (default 50 GB / 180 days). Oldest finished jobs are evicted first; completed jobs keep only their result `.zip`.
 - `PREDPEP_MEMORY` — optional Docker memory cap (e.g. `PREDPEP_MEMORY=32g`), passed to `--memory`.
-- **Auto-heal:** the gunicorn worker preloads the app to avoid the fork-time boot wedge; for an unattended fleet, also run a restarter that reacts to `health=unhealthy` (e.g. the `willfarrell/autoheal` sidecar, or have DDN `docker restart` a node whose `/health` fails).
+- **Auto-heal:** the gunicorn worker preloads the app to avoid the fork-time boot wedge; for an unattended fleet, also run a restarter that reacts to `health=unhealthy` (e.g. the `willfarrell/autoheal` sidecar, or have your orchestrator `docker restart` a node whose `/health` fails).
 
 ## Code iteration
 
@@ -103,7 +103,7 @@ docker run -d --name predpep_app \
   -p 6363:6363 --restart unless-stopped predpep:local
 ```
 
-The `-v predpep_data:/tmp/pepspec` volume is **required for jobs to persist** across restarts. Targets need only Docker (the SSH user must be able to run it) and ~10 GB free disk — no GPU, no build toolchain, no blobs. A private registry works too (`docker push`/`pull`). For a guided, self-verifying deploy on each machine, hand an agent the prompt in [docs/deploy-agent-prompt.md](docs/deploy-agent-prompt.md). For the DDN-side control API, see [docs/DDN_INTEGRATION.md](docs/DDN_INTEGRATION.md).
+The `-v predpep_data:/tmp/pepspec` volume is **required for jobs to persist** across restarts. Targets need only Docker (the SSH user must be able to run it) and ~10 GB free disk — no GPU, no build toolchain, no blobs. A private registry works too (`docker push`/`pull`). For a guided, self-verifying deploy on each machine, hand an agent the prompt in [docs/deploy-agent-prompt.md](docs/deploy-agent-prompt.md). For the controller-side integration + control API, see [docs/INTEGRATION.md](docs/INTEGRATION.md).
 
 ## Known limitations
 

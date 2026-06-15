@@ -6,8 +6,8 @@ one predPEP node, with the **browser UI active by default** (the UI is baked int
 served at `/`), and self-verifies.
 
 See the [README "Distributing the image"](../README.md#distributing-the-image-deploying-machine-by-machine)
-section for how to copy the image over first, and [DDN_INTEGRATION.md](DDN_INTEGRATION.md) for the
-control API.
+section for how to copy the image over first, and [INTEGRATION.md](INTEGRATION.md) for the
+controller-side control API.
 
 ---
 

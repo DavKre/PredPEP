@@ -74,7 +74,8 @@ e.g. `SPEGFT_99b60e04`. No auth headers (yet).
 ### Liveness / capacity (poll these)
 | Method | Path | Response |
 |---|---|---|
-| `GET` | `/health` (and `/`) | `{"service":"predpep-node","status":"ok"}` — liveness probe |
+| `GET` | `/health` | `{"service":"predpep-node","status":"ok"}` — JSON liveness probe (use this, not `/`) |
+| `GET` | `/` | the browser **UI** (HTML) — not for DDN; for liveness use `/health` |
 | `GET` | `/state` | capacity + disk — **the dispatch signal** (below) |
 
 `GET /state` →

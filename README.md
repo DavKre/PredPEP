@@ -2,6 +2,31 @@
 
 Flask + gunicorn backend for peptide design, running Rosetta + FoldX pipelines (CPU-only). It serves a JSON API for programmatic/orchestrator use **and** the original browser UI, both on port 6363 (`/` = UI, `/health` = liveness). It ships as a self-contained Docker image with an in-process, CPU-aware job queue.
 
+## Deploy on your machine (no build needed)
+
+You only need **Docker** and the pre-built image — no building, no 23 GB of tool blobs.
+
+1. **Get this repo** (for the deploy script):
+   ```
+   git clone https://forgejo.lan.peptide.space/david/PredPEP.git
+   cd PredPEP
+   ```
+2. **Get the image and launch**, either:
+   - **From the company registry** (recommended) — the script pulls it for you, then runs:
+     ```
+     ./scripts/deploy.sh forgejo.lan.peptide.space/david/predpep:v1.3.0
+     ```
+   - **or from a tarball** someone shared:
+     ```
+     docker load < predpep-v1.3.0.tgz
+     ./scripts/deploy.sh
+     ```
+3. Open **http://localhost:6363/**
+
+Your job data lives in `~/predpep_data` (override with `PREDPEP_DATA=...`) — a host directory that **survives container updates and docker cleanups**. **To update later:** get the newer image and re-run `./scripts/deploy.sh`; your data is preserved.
+
+> Building/releasing the image yourself? See [Prerequisites](#prerequisites), [First-time build](#first-time-build), and [Distributing the image](#distributing-the-image-deploying-machine-by-machine) below.
+
 ## Prerequisites
 
 - Docker 23+ (the Dockerfile uses `RUN --mount=type=bind`, which requires BuildKit — default in 23+)

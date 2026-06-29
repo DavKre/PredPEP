@@ -350,10 +350,23 @@ def list_jobs():
                 except Exception:
                     meta = {}
             meta.setdefault('job_id', entry)
-            meta['status'], meta['download_url'] = _display_status(jdir, entry)
+            disp, dl = _display_status(jdir, entry)
+            meta['status'], meta['download_url'] = disp, dl
+            # Iteration progress: live count while running, captured value once terminal.
+            if disp == 'Running':
+                meta['iteration'] = scheduler.count_iterations(entry)
+            else:
+                meta['iteration'] = meta.get('iterations_done')
+            # Completion date — fall back to the result zip's mtime for jobs that
+            # finished before completed_at was recorded.
+            if not meta.get('completed_at') and disp == 'Complete':
+                zp = os.path.join(jdir, f"{entry}.zip")
+                if os.path.exists(zp):
+                    meta['completed_at'] = datetime.fromtimestamp(
+                        os.path.getmtime(zp), timezone.utc).isoformat()
             jobs.append(meta)
         jobs.sort(key=lambda j: j.get('submitted_at', ''), reverse=True)
-        return jsonify({'success': True, 'jobs': jobs})
+        return jsonify({'success': True, 'jobs': jobs, 'max_iterations': scheduler.MAX_ITERATIONS})
     except FileNotFoundError:
         return jsonify({'success': True, 'jobs': []})
     except Exception as e:

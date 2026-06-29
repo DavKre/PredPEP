@@ -4,9 +4,12 @@
 import os
 import json
 import time
+import glob
+import re
 import shutil
 import signal
 import subprocess
+from datetime import datetime, timezone
 
 BASE_UPLOAD_FOLDER = '/tmp/pepspec/uploads'
 BASE_RESULT_FOLDER = '/tmp/pepspec/results'
@@ -22,6 +25,11 @@ def _detect_cores():
 CORE_BUDGET = int(os.environ.get('PREDPEP_CORE_BUDGET', _detect_cores()))
 RETENTION_BYTES = int(os.environ.get('PREDPEP_RETENTION_BYTES', 50 * 1024 ** 3))
 RETENTION_DAYS = int(os.environ.get('PREDPEP_RETENTION_DAYS', 180))
+
+# Iteration cap, shown in the Jobs table as "N / MAX_ITERATIONS" and used to
+# infer the finish reason (count >= cap -> limit reached, else early stop).
+# MUST mirror MAX_ITERATIONS in pipeline/run_iteMAN.py — update both together.
+MAX_ITERATIONS = 6
 
 TERMINAL = ('complete', 'stopped', 'failed')
 
@@ -52,6 +60,43 @@ def _set_status(job_id, status):
     meta = _read_meta(job_id)
     meta['job_id'] = job_id
     meta['status'] = status
+    try:
+        with open(os.path.join(_jdir(job_id), 'job.json'), 'w') as f:
+            json.dump(meta, f)
+    except Exception:
+        pass
+
+
+def _now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def count_iterations(job_id):
+    """Highest iteration index reached, read from the {job_id}_iterN_* worker dirs
+    the pipeline creates. Works while a job runs; call before _post_zip_cleanup to
+    capture the final count (cleanup deletes those dirs). Returns 0 if none yet."""
+    best = 0
+    for p in glob.glob(os.path.join(_jdir(job_id), '%s_iter*' % job_id)):
+        if not os.path.isdir(p):
+            continue
+        m = re.search(r'_iter(\d+)', os.path.basename(p))
+        if m:
+            best = max(best, int(m.group(1)))
+    return best
+
+
+def _finalize(job_id, status):
+    """Mark a job terminal and record progress: stamp completed_at + iterations_done
+    once, plus a finish_reason for completed jobs (limit vs early). MUST run before
+    _post_zip_cleanup so the iteration dirs are still countable."""
+    meta = _read_meta(job_id)
+    meta['job_id'] = job_id
+    meta['status'] = status
+    meta.setdefault('completed_at', _now_iso())
+    if 'iterations_done' not in meta:
+        meta['iterations_done'] = count_iterations(job_id)
+    if status == 'complete':
+        meta['finish_reason'] = 'limit' if meta.get('iterations_done', 0) >= MAX_ITERATIONS else 'early'
     try:
         with open(os.path.join(_jdir(job_id), 'job.json'), 'w') as f:
             json.dump(meta, f)
@@ -120,7 +165,7 @@ def cancel(job_id):
     except Exception:
         pass
     _running.pop(job_id, None)
-    _set_status(job_id, 'stopped')
+    _finalize(job_id, 'stopped')
 
 
 def _launch(job_id):
@@ -130,7 +175,7 @@ def _launch(job_id):
             spec = json.load(f)
         cmd, cpus = spec['cmd'], int(spec['cpus'])
     except Exception:
-        _set_status(job_id, 'failed')
+        _finalize(job_id, 'failed')
         return None
     d = _jdir(job_id)
     try:
@@ -143,7 +188,7 @@ def _launch(job_id):
         _set_status(job_id, 'running')
         return cpus
     except Exception:
-        _set_status(job_id, 'failed')
+        _finalize(job_id, 'failed')
         return None
 
 
@@ -182,7 +227,7 @@ def _tick():
     for job_id, _cpus in list(_running.items()):
         if not _manager_alive(job_id):
             st = _terminal_for_dead(job_id)
-            _set_status(job_id, st)
+            _finalize(job_id, st)
             if st == 'complete':
                 _post_zip_cleanup(job_id)
             _running.pop(job_id, None)
@@ -194,7 +239,7 @@ def _tick():
             cpus = int(json.load(open(_cmd_path(job_id)))['cpus'])
         except Exception:
             _queue.pop(0)
-            _set_status(job_id, 'failed')
+            _finalize(job_id, 'failed')
             continue
         if reserved + cpus > CORE_BUDGET:
             break  # head doesn't fit; wait (no skip-ahead)
@@ -280,12 +325,12 @@ def _reconcile():
             if os.path.exists(_cmd_path(entry)):
                 _queue.append(entry)
             else:
-                _set_status(entry, 'failed')
+                _finalize(entry, 'failed')
         elif st == 'running':
             if _manager_alive(entry):
                 _running[entry] = int(meta.get('cpus', 2))
             else:                            # subprocess died with the container
-                _set_status(entry, _terminal_for_dead(entry))
+                _finalize(entry, _terminal_for_dead(entry))
     _queue.sort(key=lambda j: _read_meta(j).get('submitted_at', ''))
 
 

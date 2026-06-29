@@ -3,7 +3,7 @@
 
 services:
   predpep:
-    image: predpep:v1.2.0          # keep in sync with ./VERSION (scripts/build.sh also tags :latest)
+    image: predpep:v1.3.0          # keep in sync with ./VERSION (scripts/build.sh also tags :latest)
     container_name: predpep_app
     ports:
       - "6363:6363"

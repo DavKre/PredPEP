@@ -110,6 +110,7 @@
         .status-processing { color: #b06000; }
         .status-queued { color: #555; }
         .status-stopped { color: #c5221f; font-weight: bold; }
+        .iter-reason { display: block; font-size: 0.78em; color: #888; }
         .job-delete { background: #c5221f; color: #fff; border: none; padding: 3px 8px; cursor: pointer; border-radius: 3px; }
         .job-stop { background: #b06000; color: #fff; border: none; padding: 3px 8px; cursor: pointer; border-radius: 3px; }
     </style>
@@ -225,9 +226,9 @@
             <p style="font-size:0.9em;color:#555;">All jobs on this machine — no login, everyone sees all jobs. <b>Delete</b> permanently removes a job's files from disk. (A job left "Processing" after a restart is orphaned — proper run-state tracking comes later.)</p>
             <table id="jobsTable" class="jobs-table">
                 <thead><tr>
-                    <th>Date</th><th>Protein</th><th>User</th><th>CPUs</th><th>Pep. length</th><th>Status</th><th>Download</th><th>Actions</th>
+                    <th>Date</th><th>Protein</th><th>User</th><th>CPUs</th><th>Pep. length</th><th>Status</th><th>Iterations</th><th>Completed</th><th>Download</th><th>Actions</th>
                 </tr></thead>
-                <tbody id="jobsTableBody"><tr><td colspan="8">Loading…</td></tr></tbody>
+                <tbody id="jobsTableBody"><tr><td colspan="10">Loading…</td></tr></tbody>
             </table>
         </div>
     </div>

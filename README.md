@@ -8,13 +8,13 @@ You only need **Docker** and the pre-built image — no building, no 23 GB of to
 
 1. **Get this repo** (for the deploy script):
    ```
-   git clone https://forgejo.lan.peptide.space/david/PredPEP.git
+   git clone https://forgejo.lan.peptide.space/SpacePeptidesDev/PredPEP.git
    cd PredPEP
    ```
 2. **Get the image and launch**, either:
    - **From the company registry** (recommended) — the script pulls it for you, then runs:
      ```
-     ./scripts/deploy.sh forgejo.lan.peptide.space/david/predpep:v1.3.0
+     ./scripts/deploy.sh forgejo.lan.peptide.space/spacepeptidesdev/predpep:v1.3.0
      ```
    - **or from a tarball** someone shared:
      ```

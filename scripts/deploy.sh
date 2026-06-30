@@ -8,7 +8,7 @@
 #
 # Usage:
 #   ./scripts/deploy.sh                                              # use predpep:<VERSION> (already loaded/pulled)
-#   ./scripts/deploy.sh forgejo.lan.peptide.space/david/predpep:v1.3.0   # pull from the registry, then run
+#   ./scripts/deploy.sh forgejo.lan.peptide.space/spacepeptidesdev/predpep:v1.3.0   # pull from the registry, then run
 #   PREDPEP_DATA=/srv/predpep ./scripts/deploy.sh                    # custom data location
 set -euo pipefail
 
@@ -26,7 +26,7 @@ if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   echo "image '$IMAGE' not present locally — pulling..."
   if ! docker pull "$IMAGE"; then
     echo "error: could not get image '$IMAGE'. Either:" >&2
-    echo "  - pull from the company registry:  ./scripts/deploy.sh forgejo.lan.peptide.space/david/predpep:$VERSION" >&2
+    echo "  - pull from the company registry:  ./scripts/deploy.sh forgejo.lan.peptide.space/spacepeptidesdev/predpep:$VERSION" >&2
     echo "  - or load a shared tarball first:   docker load < predpep-$VERSION.tgz   then re-run ./scripts/deploy.sh" >&2
     exit 1
   fi

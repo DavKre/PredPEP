@@ -96,14 +96,14 @@ docker rm -f predpep_app                                    # stop and remove in
 
 ## Docker Compose alternative
 
-Equivalent to `scripts/run.sh` (no bind mounts):
+Equivalent to `scripts/deploy.sh` — same **host bind-mount** for job data, so it's deletion-proof:
 
 ```
-docker compose up -d
-docker compose down
+docker compose up -d        # data -> ./predpep_data  (override: PREDPEP_DATA=/path docker compose up -d)
+docker compose down         # stops the node; the data directory is NOT removed
 ```
 
-Compose and `run.sh` both create a container named `predpep_app` on port 6363 — they can't coexist. Pick one; if you've started the container via `scripts/run.sh`, stop it before `docker compose up -d` (and vice versa).
+Job data lives in a **host directory** (`./predpep_data` by default), so `docker compose down -v`, `docker volume prune`, and `docker system prune --volumes` can't wipe it — only `rm -rf` on that path. A one-shot init service makes the dir writable by the app on first `up` (needs Docker Compose v2). Compose, `deploy.sh`, and `run.sh` all create the container `predpep_app` on port 6363 — they can't coexist, so pick one. If you use both `deploy.sh` and compose on the same host, point `PREDPEP_DATA` at the **same** directory so they share job history.
 
 ## Distributing the image (deploying machine-by-machine)
 

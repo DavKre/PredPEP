@@ -1,14 +1,33 @@
-# Equivalent to run.sh: predpep_app, detached, GPU, restart=unless-stopped.
-# For code-iteration bind-mounts, use run-dev.sh instead.
+# Equivalent to scripts/deploy.sh: predpep_app, detached, CPU-only, restart=unless-stopped.
+# Job data lives in a HOST bind-mount (PREDPEP_DATA, default ./predpep_data) — a host
+# directory, so it survives `docker compose down -v`, `docker volume prune`, and
+# `docker system prune --volumes`. The init service makes that dir writable by the
+# image's app user (uid 1003) on first `up` (needs Docker Compose v2).
+# For code-iteration bind-mounts of the source tree, use run-dev.sh instead.
 
 services:
+  # one-shot: prepare + chown the bind-mounted data dir for the app user (uid 1003)
+  predpep-init:
+    image: predpep:v1.3.0
+    user: "0"
+    volumes:
+      - "${PREDPEP_DATA:-./predpep_data}:/tmp/pepspec"
+    entrypoint: ["sh", "-c", "mkdir -p /tmp/pepspec/results /tmp/pepspec/uploads && chown -R 1003:1003 /tmp/pepspec"]
+    restart: "no"
+
   predpep:
     image: predpep:v1.3.0          # keep in sync with ./VERSION (scripts/build.sh also tags :latest)
     container_name: predpep_app
+    depends_on:
+      predpep-init:
+        condition: service_completed_successfully
     ports:
       - "6363:6363"
     volumes:
-      - predpep_data:/tmp/pepspec
+      # HOST bind-mount (not a named volume): survives `docker compose down -v`,
+      # `docker volume prune`, etc. Override the host path with PREDPEP_DATA.
+      # To share data with scripts/deploy.sh, point PREDPEP_DATA at the same dir.
+      - "${PREDPEP_DATA:-./predpep_data}:/tmp/pepspec"
     restart: unless-stopped
     pids_limit: 4096
     logging:
@@ -16,6 +35,3 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-volumes:
-  predpep_data:

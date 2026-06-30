@@ -12,6 +12,8 @@ CLAUDE.local.md
 
 # --- Build / runtime artifacts ---
 *.log
+# Default bind-mount data dir for docker-compose / scripts/deploy.sh
+/predpep_data/
 
 # --- Python ---
 __pycache__/

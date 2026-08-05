@@ -11,7 +11,10 @@ window.loadJobs = async function () {
         if (!data.jobs.length) { tbody.innerHTML = `<tr><td colspan="10">No jobs yet.</td></tr>`; return; }
         const esc = s => String(s ?? '—').replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
         const cls = st => ({ Complete: 'status-complete', Running: 'status-processing', Queued: 'status-queued',
-                             Stopped: 'status-stopped', Failed: 'status-stopped' }[st] || 'status-processing');
+                             Partial: 'status-partial', Stopped: 'status-stopped', Failed: 'status-stopped' }[st] || 'status-processing');
+        // The API may still report "Complete" for a partial job while the wire gate
+        // (PREDPEP_PARTIAL_STATUS) is off, so the UI trusts the flag, not the string.
+        const label = j => (j.partial ? 'Partial' : j.status);
         const maxIter = data.max_iterations || 6;
         const reasonText = { limit: 'limit reached', early: 'early stop' };
         tbody.innerHTML = data.jobs.map(j => {
@@ -24,7 +27,7 @@ window.loadJobs = async function () {
             return `<tr>
                 <td>${date}</td><td>${esc(j.protein_symbol)}</td><td>${esc(j.user_name)}</td>
                 <td>${esc(j.cpus)}</td><td>${esc(j.peptide_length)}</td>
-                <td class="${cls(j.status)}">${esc(j.status)}</td><td>${iter}</td><td>${done}</td><td>${dl}</td>
+                <td class="${cls(label(j))}"${j.partial && j.message ? ` title="${esc(j.message)}"` : ''}>${esc(label(j))}${j.partial && j.failed_stage ? `<span class="iter-reason">${esc(j.failed_stage)}</span>` : ''}</td><td>${iter}</td><td>${done}</td><td>${dl}</td>
                 <td>${stoppable ? `<button class="job-stop" data-id="${encodeURIComponent(j.job_id)}">Stop</button> ` : ''}<button class="job-delete" data-id="${encodeURIComponent(j.job_id)}">Delete</button></td>
             </tr>`;
         }).join('');

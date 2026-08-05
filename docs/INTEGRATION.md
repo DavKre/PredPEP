@@ -10,7 +10,7 @@ yet** (a deferred security phase) — see §8.
 
 ## 1. Model in one paragraph
 
-A **predPEP node** is a single self-contained Docker image (`predpep:v1.3.0`, ~4.8 GB, CPU-only,
+A **predPEP node** is a single self-contained Docker image (`predpep:v1.4.0`, ~4.8 GB, CPU-only,
 `ubuntu:22.04` base) that runs a Flask/gunicorn service on **port 6363**. It accepts a
 peptide-design job (a PDB complex + parameters), runs a Rosetta + FoldX pipeline, and produces a
 result `.zip`. Each node is **autonomous**: it has its own CPU-aware queue, disk retention, and a
@@ -73,14 +73,14 @@ e.g. `SPEGFT_99b60e04`. No auth headers (yet).
 ### Liveness / capacity (poll these)
 | Method | Path | Returns |
 |---|---|---|
-| `GET` | `/health` | `{"service":"predpep-node","status":"ok","version":"v1.3.0"}` — JSON liveness probe (use this, not `/`) |
+| `GET` | `/health` | `{"service":"predpep-node","status":"ok","version":"v1.4.0"}` — JSON liveness probe (use this, not `/`) |
 | `GET` | `/` | the browser **UI** (HTML) — not for the controller; for liveness use `/health` |
 | `GET` | `/state` | capacity + disk — **the dispatch signal** (below) |
 
 `GET /state` →
 ```json
 {
-  "version": "v1.3.0",       // node image version (baked from the VERSION file at build) — for update checks
+  "version": "v1.4.0",       // node image version (baked from the VERSION file at build) — for update checks
   "core_budget": 32,         // max cores this node will commit
   "reserved_cores": 8,       // cores held by running jobs right now
   "available_cores": 24,     // core_budget - reserved
@@ -116,23 +116,60 @@ when cores free up. On bad input: `{"success": false, "error": "..."}`.
 ### Track a job
 | Method | Path | Returns |
 |---|---|---|
-| `GET` | `/status/<job_id>` | `{"status": "...", "download_url": "..."|null, "message": "..."}` |
+| `GET` | `/status/<job_id>` | `{"status": "...", "download_url": "..."|null, "message": "...", "partial": bool, "failed_stage": "..."|null, "artifacts": [...]}` |
 | `GET` | `/jobs` | `{"success": true, "jobs": [ {...}, ... ]}` newest-first (all jobs on the node) |
 
 `/jobs` entries:
 ```json
 { "job_id": "...", "submitted_at": "2026-06-13T...Z", "protein_symbol": "EGF",
   "user_name": "alice", "cpus": 8, "pdb_filename": "SPEGFA.pdb", "peptide_length": 13,
-  "status": "Running", "download_url": "/download/<id>/<id>.zip" | null }
+  "status": "Running", "download_url": "/download/<id>/<id>.zip" | null,
+  "partial": false, "failed_stage": null, "message": null, "artifacts": [] }
 ```
-**Status values** (see §4): `Queued`, `Running`, `Complete`, `Stopped`, `Failed`
+**Status values** (see §4): `Queued`, `Running`, `Complete`, `Stopped`, `Failed` — plus `Partial`
+**only when the node enables `PREDPEP_PARTIAL_STATUS`** (see below)
 (and `Pending/Failed` from `/status` when the job dir is absent). ⚠️ **Casing wrinkle:** `/upload`
 returns lowercase (`"running"`/`"queued"`); `/status` and `/jobs` return Title-case. **Compare
 case-insensitively.**
 
+#### Partial results — read `partial`, not just `status`
+A job can finish with usable per-design results while its **final score aggregation** fails, so
+`tab2_final_scores.csv` is missing or incomplete. That case is reported with:
+
+| Field | Meaning |
+|---|---|
+| `partial` | `true` when the score table is missing or incomplete |
+| `failed_stage` | which stage failed: `score_aggregation`, `score_merge`, `spec_file_corruption`, `zip`, `manager` |
+| `message` | short human-readable reason |
+| `artifacts` | result files present, e.g. `["SPILRH.all.txt", "tab2_final_scores.csv", "*_B.fasta", "*.spec"]` |
+
+⚠️ **`status` alone is not sufficient.** By default a partial job still reports
+`status: "Complete"` with `partial: true`, so existing consumers keep working unchanged. The node
+only emits the distinct `Partial` status value when it is started with
+`PREDPEP_PARTIAL_STATUS=1` — **do not enable that until your client treats `Partial` as a terminal,
+results-available state**, otherwise a client that maps unknown statuses to *running* will poll a
+finished job forever.
+
+Treat a partial job as **terminal and downloadable**: the zip is complete, and
+`tab2_final_scores.csv` (when present) carries a `rosetta_available` column that is `False` for rows
+whose Rosetta score is unavailable. Those `Rosetta_Total_Score` cells are **empty — never `0`**.
+
+> #### 🔻 Behaviour change in v1.4.0 — "missing scores file" no longer detects a bad run
+>
+> Before v1.4.0, a failed aggregation left **no `tab2_final_scores.csv` at all**, so consumers could
+> detect the failure by the file's absence. v1.4.0 always writes the table (FoldX-only, Rosetta
+> column empty, `rosetta_available=False`) — deliberately, so a degraded run still yields usable
+> results.
+>
+> **Consequence: the missing-file signal stops firing.** A degraded run now looks clean to any
+> consumer that isn't reading `partial` / `failed_stage`. After v1.4.0 **the flags are the only way
+> to distinguish a degraded run from a good one** — check `partial` (or `rosetta_available` in the
+> CSV), not the presence of the file.
+
 ### Get the result
-`GET <download_url>` → the result `.zip` (binary; `Content-Type: application/zip`). Only present
-when `status == Complete`.
+`GET <download_url>` → the result `.zip` (binary; `Content-Type: application/zip`). Present for
+**every terminal state that produced a zip** — `Complete`, partial, and `Stopped` jobs included, so
+a stopped or degraded run never strands the user's results.
 
 ### Control a job
 | Method | Path | Effect |
@@ -155,6 +192,8 @@ Both validate the id (reject `/`, `..`); `404` if unknown.
 
 ```
 Queued ──(cores free)──> Running ──> Complete   (zip produced; node keeps only the .zip)
+                                  └─> Partial    (results usable, but the final score table
+                                                   is missing/incomplete — see `partial`)
                                   └─> Stopped    (POST /stop, or DELETE)
                                   └─> Failed     (manager exited without a zip, OR
                                                    interrupted by a node restart)
@@ -163,7 +202,9 @@ Queued ──(cores free)──> Running ──> Complete   (zip produced; node 
   **`Failed`** (its subprocess died with the container) and a job that was `Queued` is **re-queued**
   automatically. So a restart never leaves a job stuck "Processing." **Treat `Failed` as
   "re-dispatch if still wanted."**
-- **Terminal states:** `Complete`, `Stopped`, `Failed`. Poll until one of these.
+- **Terminal states:** `Complete`, `Partial`, `Stopped`, `Failed`. Poll until one of these — and
+  treat `partial: true` as terminal too, since it is reported as `Complete` until the node enables
+  `PREDPEP_PARTIAL_STATUS`.
 - **Retention:** terminal jobs are auto-evicted once the node exceeds **50 GB** or a job is older
   than **180 days** (oldest-first; completed jobs keep only their `.zip`). **Fetch a result before
   it's evicted** — don't assume a `Complete` zip lives forever.

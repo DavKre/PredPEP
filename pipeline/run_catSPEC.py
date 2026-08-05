@@ -2,8 +2,10 @@
 
 import pandas as pd
 import glob
+import json
 import re
 import os
+import sys
 
 # --- Define the BASE RESULT FOLDER ---
 # This is the directory containing all project folders (e.g., SPCRCK)
@@ -17,101 +19,127 @@ def process_peptide_spec_files(project_dir="."):
     PROCESSED_SCORES_FILE = "processed_peptide_scores.csv"
     ALL_SCORES_FILE = "all_model_scores.csv"
     NON_MC_PDB_FILE = "non_mc_pdbs.csv"
+    REPORT_FILE = "aggregation_report.json"
 
     print(f"🔍 Searching for .spec files in '{os.path.abspath(project_dir)}'...")
     spec_files = glob.glob(os.path.join(project_dir, '**', '*.spec'), recursive=True)
 
     if not spec_files:
         print("❌ No .spec files found. Exiting.")
-        return
+        return False
 
     print(f"✅ Found {len(spec_files)} .spec files. Starting processing...")
-    
+
     all_data = []
     # Pattern to extract key-value scores (e.g., total_score: -435.778)
     score_pattern = re.compile(r'(\w+-\w+|\w+):?\s*?([+-]?\s*\d+\.\d+|\d+)')
 
+    # Damage tally — a .spec file can be truncated or corrupted on disk (seen in job
+    # SPILRH_c70d2d4c: a 61-byte burst of invalid UTF-8 inside one of 480 files).
+    # One bad file must cost that file, never the whole aggregation, so every file is
+    # read leniently AND isolated in its own try/except. Counts are reported at the
+    # end and drive the exit code so the caller can flag the run as degraded.
+    unreadable_files = []
+    corrupt_line_count = 0
+
     for file_path in spec_files:
-        
+
         # Determine the iteration folder from the .spec file's location
         # Example: /tmp/pepspec/results/SPCRCK/SPCRCK_iter6_2f0e/score.spec
         spec_dir = os.path.dirname(file_path) # e.g., /tmp/pepspec/results/SPCRCK/SPCRCK_iter6_2f0e
-        
+
         # Get the iteration name (e.g., SPCRCK_iter6_2f0e)
-        iteration_folder = os.path.basename(spec_dir) 
-        
-        with open(file_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                
-                parts = line.split()
+        iteration_folder = os.path.basename(spec_dir)
 
-                if len(parts) < 3:
-                    print(f"⚠️ Skipping malformed line in {file_path}: {line}")
-                    continue
+        try:
+            # errors='replace': undecodable bytes become U+FFFD instead of raising,
+            # so the readable records of a damaged file are still recovered.
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                lines = list(f)
+        except OSError as e:
+            unreadable_files.append(file_path)
+            print(f"⚠️ Skipping unreadable .spec file {file_path}: {e}")
+            continue
 
-                full_pdb_path = parts[0]
-                pep_seq = parts[1]
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # A record containing replacement characters was damaged on disk;
+            # any number parsed out of it is untrustworthy, so drop the record
+            # rather than importing mangled column names and values.
+            if '�' in line:
+                corrupt_line_count += 1
+                print(f"⚠️ Skipping corrupted line in {file_path} (undecodable bytes)")
+                continue
+
+            parts = line.split()
+
+            if len(parts) < 3:
+                print(f"⚠️ Skipping malformed line in {file_path}: {line}")
+                continue
+
+            full_pdb_path = parts[0]
+            pep_seq = parts[1]
+            
+            # Extract the desired 'pepID' which is the filename WITH the '.pdb' extension.
+            pep_id = os.path.basename(full_pdb_path)
+            
+            # 1. Calculate the relative path from BASE_RESULT_FOLDER
+            try:
+                relative_path_from_spec = os.path.relpath(full_pdb_path, BASE_RESULT_FOLDER)
+            except ValueError:
+                # Fallback for paths that might span different drives/file systems
+                relative_path_from_spec = full_pdb_path.replace(BASE_RESULT_FOLDER, '', 1).lstrip(os.sep)
+            
+            # The path fragment is now: 'SPCRCK/SPCRCKLIL5.pdbs/SPCRCKLIL5_10.pdb'
+            
+            # --- START FIXING PATH ORDER (Robust Slicing) ---
+            
+            # 1. Find the index where the project name ends (first '/')
+            try:
+                first_sep_index = relative_path_from_spec.index(os.sep)
                 
-                # Extract the desired 'pepID' which is the filename WITH the '.pdb' extension.
-                pep_id = os.path.basename(full_pdb_path)
+                # path_prefix_with_sep: e.g., 'SPCRCK/' (Includes the first separator)
+                path_prefix_with_sep = relative_path_from_spec[:first_sep_index + 1] 
                 
-                # 1. Calculate the relative path from BASE_RESULT_FOLDER
+                # path_suffix: e.g., 'SPCRCKLIL5.pdbs/SPCRCKLIL5_10.pdb' (The rest of the path)
+                path_suffix = relative_path_from_spec[first_sep_index + 1:]          
+            except ValueError:
+                # Handle case where there is no separator (malformed path fragment)
+                print(f"⚠️ Warning: Malformed path fragment, cannot insert iteration folder: {relative_path_from_spec}")
+                relative_path = relative_path_from_spec
+            else:
+                # 2. Join the pieces in the correct order: Prefix + Iteration + Suffix
+                # Result: SPCRCK/SPCRCK_iter3_45ce/SPCRCKLIL5.pdbs/SPCRCKLIL5_10.pdb
+                
+                # Note: We use os.path.join here for safety, it will handle the trailing separator 
+                # from path_prefix_with_sep correctly.
+                relative_path = os.path.join(path_prefix_with_sep, iteration_folder, path_suffix)
+                # os.path.join is smart enough to handle a path starting with 'SPCRCK/' and
+                # an argument like 'SPCRCK_iter3_45ce' to produce 'SPCRCK/SPCRCK_iter3_45ce'
+            
+            # --- END FIXING PATH ORDER ---
+
+            row_data = {
+                'pepID': pep_id,
+                'pepSeq': pep_seq,
+                'pdb_relative_path': relative_path, 
+            }
+
+            score_string = ' '.join(parts[2:])
+            
+            matches = score_pattern.findall(score_string)
+            
+            for key, value_str in matches:
+                cleaned_value = value_str.strip().replace(' ', '')
                 try:
-                    relative_path_from_spec = os.path.relpath(full_pdb_path, BASE_RESULT_FOLDER)
+                    row_data[key] = float(cleaned_value)
                 except ValueError:
-                    # Fallback for paths that might span different drives/file systems
-                    relative_path_from_spec = full_pdb_path.replace(BASE_RESULT_FOLDER, '', 1).lstrip(os.sep)
-                
-                # The path fragment is now: 'SPCRCK/SPCRCKLIL5.pdbs/SPCRCKLIL5_10.pdb'
-                
-                # --- START FIXING PATH ORDER (Robust Slicing) ---
-                
-                # 1. Find the index where the project name ends (first '/')
-                try:
-                    first_sep_index = relative_path_from_spec.index(os.sep)
-                    
-                    # path_prefix_with_sep: e.g., 'SPCRCK/' (Includes the first separator)
-                    path_prefix_with_sep = relative_path_from_spec[:first_sep_index + 1] 
-                    
-                    # path_suffix: e.g., 'SPCRCKLIL5.pdbs/SPCRCKLIL5_10.pdb' (The rest of the path)
-                    path_suffix = relative_path_from_spec[first_sep_index + 1:]          
-                except ValueError:
-                    # Handle case where there is no separator (malformed path fragment)
-                    print(f"⚠️ Warning: Malformed path fragment, cannot insert iteration folder: {relative_path_from_spec}")
-                    relative_path = relative_path_from_spec
-                else:
-                    # 2. Join the pieces in the correct order: Prefix + Iteration + Suffix
-                    # Result: SPCRCK/SPCRCK_iter3_45ce/SPCRCKLIL5.pdbs/SPCRCKLIL5_10.pdb
-                    
-                    # Note: We use os.path.join here for safety, it will handle the trailing separator 
-                    # from path_prefix_with_sep correctly.
-                    relative_path = os.path.join(path_prefix_with_sep, iteration_folder, path_suffix)
-                    # os.path.join is smart enough to handle a path starting with 'SPCRCK/' and
-                    # an argument like 'SPCRCK_iter3_45ce' to produce 'SPCRCK/SPCRCK_iter3_45ce'
-                
-                # --- END FIXING PATH ORDER ---
+                    row_data[key] = cleaned_value
 
-                row_data = {
-                    'pepID': pep_id,
-                    'pepSeq': pep_seq,
-                    'pdb_relative_path': relative_path, 
-                }
-
-                score_string = ' '.join(parts[2:])
-                
-                matches = score_pattern.findall(score_string)
-                
-                for key, value_str in matches:
-                    cleaned_value = value_str.strip().replace(' ', '')
-                    try:
-                        row_data[key] = float(cleaned_value)
-                    except ValueError:
-                        row_data[key] = cleaned_value
-
-                all_data.append(row_data)
+            all_data.append(row_data)
 
     # 2. Convert the list of dictionaries to a pandas DataFrame
     df_all = pd.DataFrame(all_data)
@@ -121,7 +149,7 @@ def process_peptide_spec_files(project_dir="."):
     if 'total_score' not in df_all.columns:
         print("🛑 Error: 'total_score' column not found in data. Cannot proceed with sorting/filtering.")
         df_all.to_csv(ALL_SCORES_FILE, index=False)
-        return
+        return False
 
     # --- NEW STEP 3: Remove unwanted columns ---
     UNWANTED_COLS = ['43', '42', '40', '41', '29']
@@ -172,7 +200,36 @@ def process_peptide_spec_files(project_dir="."):
     print(f"Rows kept in {PROCESSED_SCORES_FILE} (best-scoring model): **{len(df_unique)}**")
     print(f"Base PDBs kept in {NON_MC_PDB_FILE}: **{len(df_non_mc)}**")
     print(f"Rows removed (suboptimal duplicates): **{rows_removed}**")
+    if unreadable_files or corrupt_line_count:
+        print(f"⚠️ Degraded input: {len(unreadable_files)} unreadable file(s), "
+              f"{corrupt_line_count} corrupted line(s) skipped.")
+        for p in unreadable_files:
+            print(f"   unreadable: {p}")
     print("-------------------------")
 
+    # Machine-readable damage report, zipped with the results so a consumer can
+    # tell a clean aggregation from a degraded one without parsing stderr.
+    try:
+        with open(REPORT_FILE, 'w') as f:
+            json.dump({
+                'spec_files_found': len(spec_files),
+                'spec_files_unreadable': len(unreadable_files),
+                'unreadable_files': unreadable_files,
+                'corrupt_lines_skipped': corrupt_line_count,
+                'rows_processed': int(original_rows),
+                'non_mc_rows': int(len(df_non_mc)),
+                'degraded': bool(unreadable_files or corrupt_line_count),
+            }, f, indent=2)
+    except OSError as e:
+        print(f"⚠️ Could not write {REPORT_FILE}: {e}")
+
+    return True
+
 if __name__ == "__main__":
-    process_peptide_spec_files()
+    # Exit non-zero when the aggregation did not produce its critical output.
+    # Degraded-but-complete runs (a few skipped files/lines) still exit 0 — the
+    # damage is recorded in aggregation_report.json.
+    ok = process_peptide_spec_files()
+    if not ok or not os.path.exists("non_mc_pdbs.csv"):
+        print("🛑 Aggregation failed to produce non_mc_pdbs.csv.", file=sys.stderr)
+        sys.exit(1)

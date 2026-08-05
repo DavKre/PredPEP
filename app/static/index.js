@@ -112,10 +112,22 @@ window.pollStatus = async (jobId) => {
             
             // --- ADDED THIS SECTION / DIESEN ABSCHNITT HINZUGEFUEGT ---
             if (data.download_url) {
+                // A partial job still reports "Complete" on the wire while the
+                // PREDPEP_PARTIAL_STATUS gate is off, so trust the flag: never show a
+                // green "Job Complete!" for a run whose score table is incomplete.
                 const dlContainer = document.getElementById('downloadLink');
-                dlContainer.innerHTML = `
-                    <div class="alert alert-success mt-3">
-                        <strong>Job Complete!</strong> 
+                const stage = data.failed_stage ? ` (${data.failed_stage})` : '';
+                dlContainer.innerHTML = data.partial
+                    ? `<div class="alert alert-warning mt-3">
+                        <strong>Partial results${stage}.</strong>
+                        The final score aggregation did not complete, so the score table
+                        is missing or incomplete. The raw results are still available.
+                        <a href="${data.download_url}" class="btn btn-primary btn-sm ml-2" download>
+                            Download Results (.zip)
+                        </a>
+                    </div>`
+                    : `<div class="alert alert-success mt-3">
+                        <strong>Job Complete!</strong>
                         <a href="${data.download_url}" class="btn btn-primary btn-sm ml-2" download>
                             Download Results (.zip)
                         </a>

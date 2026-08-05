@@ -3,11 +3,12 @@
 import os
 import sys
 import time
+import json
 import subprocess
 import re
 import glob
-import uuid 
-import shutil 
+import uuid
+import shutil
 
 # Ensure all necessary paths are available for subprocess calls to bash scripts
 os.environ['PATH'] = (
@@ -15,6 +16,87 @@ os.environ['PATH'] = (
     "/usr/local/rosetta_pkgs/rosetta.binary.ubuntu.release-408/main/source/bin:"
     "/usr/local/pepspec_pipe:" + os.environ['PATH']
 )
+
+FINAL_SCORES_FILE = 'tab2_final_scores.csv'
+FINAL_STATUS_FILE = 'final_status.json'
+AGGREGATION_REPORT_FILE = 'aggregation_report.json'
+
+
+def _assess_final_outcome(master_result_dir, master_pdb_base, failed_stage, stage_errors):
+    """Decide the job's terminal state from what phase 3 actually produced.
+
+    Returns (status, failed_stage, message) where status is one of:
+      complete — the final score table exists and nothing was lost;
+      partial  — usable per-design results exist, but the score table is missing or
+                 incomplete (this is what SPILRH_c70d2d4c really was);
+      failed   — nothing usable came out of the final stages.
+    """
+    have_final_csv = os.path.exists(os.path.join(master_result_dir, FINAL_SCORES_FILE))
+    base_only = master_pdb_base.split('_')[0]
+    have_foldx = bool(glob.glob(os.path.join(master_result_dir, f"{base_only}.all.txt"))
+                      or glob.glob(os.path.join(master_result_dir, "*.all.txt")))
+
+    # Damage recorded by run_catSPEC.py: files/lines dropped means the score table is
+    # incomplete even when every stage exited 0.
+    degraded, damage = False, ''
+    try:
+        with open(os.path.join(master_result_dir, AGGREGATION_REPORT_FILE)) as f:
+            report = json.load(f)
+        if report.get('degraded'):
+            degraded = True
+            damage = (f"{report.get('spec_files_unreadable', 0)} unreadable .spec file(s), "
+                      f"{report.get('corrupt_lines_skipped', 0)} corrupted line(s) skipped")
+    except (OSError, ValueError):
+        pass
+
+    if not have_final_csv:
+        message = '; '.join(stage_errors) or f'{FINAL_SCORES_FILE} was not produced'
+        if have_foldx:
+            return 'partial', failed_stage or 'score_aggregation', \
+                f'{FINAL_SCORES_FILE} missing: {message}'
+        return 'failed', failed_stage or 'score_aggregation', message
+
+    if failed_stage or degraded:
+        detail = '; '.join(stage_errors) or damage
+        return 'partial', failed_stage or 'spec_file_corruption', \
+            f'{FINAL_SCORES_FILE} is incomplete: {detail}'
+
+    return 'complete', None, 'All final stages completed.'
+
+
+def _write_final_status(master_result_dir, job_id, status, failed_stage, message):
+    """The manager's verdict, read by the scheduler to finalise job.json."""
+    payload = {'job_id': job_id, 'status': status, 'failed_stage': failed_stage,
+               'message': message, 'recorded_at': time.strftime('%Y-%m-%dT%H:%M:%S+00:00',
+                                                                time.gmtime())}
+    try:
+        with open(os.path.join(master_result_dir, FINAL_STATUS_FILE), 'w') as f:
+            json.dump(payload, f, indent=2)
+    except OSError as e:
+        print(f"WARNING: could not write {FINAL_STATUS_FILE}: {e}", file=sys.stderr)
+
+
+def _stamp_job_json(master_result_dir, status, failed_stage, message):
+    """Record the terminal state in job.json as soon as the manager knows it, instead
+    of leaving "running" behind for the scheduler to correct (or not)."""
+    path = os.path.join(master_result_dir, 'job.json')
+    try:
+        with open(path) as f:
+            meta = json.load(f)
+    except (OSError, ValueError):
+        meta = {}
+    meta['status'] = status
+    meta.setdefault('completed_at', time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime()))
+    if failed_stage:
+        meta['failed_stage'] = failed_stage
+    if message:
+        meta['message'] = message
+    try:
+        with open(path, 'w') as f:
+            json.dump(meta, f)
+    except OSError as e:
+        print(f"WARNING: could not stamp job.json: {e}", file=sys.stderr)
+
 
 def run_bash_script(script_path, *args, log_file=None):
     """Utility to run a bash script and wait for its completion."""
@@ -435,20 +517,42 @@ def iterative_pipeline_manager(input_pdb_path, master_result_dir, cpus, job_id, 
         original_cwd = os.getcwd()
         os.chdir(master_result_dir)
 
+        # A failing final stage must NOT report as a successful job. Each failure is
+        # recorded and folded into a terminal verdict below (job SPILRH_c70d2d4c ran
+        # 14 h, crashed here, and still reported "Complete").
+        failed_stage = None
+        stage_errors = []
+
         # 1. Run Rosetta Score Aggregation (run_catSPEC.py)
         print("\n*** Running Rosetta Score Aggregation (run_catSPEC.py) ***")
         try:
             subprocess.run([cat_spec_script], check=True, stdout=sys.stderr, stderr=sys.stderr)
         except subprocess.CalledProcessError as e:
+            failed_stage = 'score_aggregation'
+            stage_errors.append(f"run_catSPEC.py failed: {e}")
             print(f"FATAL ERROR running run_catSPEC.py: {e}", file=sys.stderr)
-            
+
         # 2. Run Score Merge (run_mergeScores.py)
         print("\n*** Running Score Merge (run_mergeScores.py) ***")
         try:
             subprocess.run([merge_script, master_pdb_base], check=True, stdout=sys.stderr, stderr=sys.stderr)
         except subprocess.CalledProcessError as e:
+            failed_stage = failed_stage or 'score_merge'
+            stage_errors.append(f"run_mergeScores.py failed: {e}")
             print(f"FATAL ERROR running run_mergeScores.py: {e}", file=sys.stderr)
-            
+
+        # 3. Verdict, based on the deliverable itself rather than on exit codes alone —
+        # the aggregation has silent-success paths that exit 0 without producing it.
+        final_status, failed_stage, status_message = _assess_final_outcome(
+            master_result_dir, master_pdb_base, failed_stage, stage_errors)
+        print(f"\n*** Final outcome: {final_status} "
+              f"({failed_stage or 'no failed stage'}) — {status_message} ***")
+
+        # Written before zipping so it travels inside the result zip: a consumer can
+        # then diagnose the run offline instead of parsing manager_stderr.log.
+        _write_final_status(master_result_dir, job_id, final_status,
+                            failed_stage, status_message)
+
         #os.chdir(original_cwd)
 
         # --- ZIPPING FINAL OUTPUTS ---
@@ -479,6 +583,15 @@ def iterative_pipeline_manager(input_pdb_path, master_result_dir, cpus, job_id, 
             print(f"Final recursive zip created at {final_zip_path}")
         except subprocess.CalledProcessError as e:
             print(f"ERROR: Failed to create zip: {e}")
+            final_status = 'failed' if final_status != 'complete' else 'partial'
+            failed_stage = failed_stage or 'zip'
+            status_message = f'Failed to create result zip: {e}'
+            _write_final_status(master_result_dir, job_id, final_status,
+                                failed_stage, status_message)
+
+        # Stamp job.json only now that the zip is on disk, so its recorded state
+        # matches what a consumer can actually retrieve.
+        _stamp_job_json(master_result_dir, final_status, failed_stage, status_message)
 
         os.chdir(original_cwd)
 
@@ -493,10 +606,22 @@ def iterative_pipeline_manager(input_pdb_path, master_result_dir, cpus, job_id, 
             shutil.rmtree(TEMP_INPUT_DIR)
             print(f"Cleaned up temporary staging directory: {TEMP_INPUT_DIR}")
 
+        # Honest exit code: a degraded or failed run must not look like a clean one to
+        # anything that inspects it (the scheduler reads final_status.json, but a human
+        # or a future caller reads $?).
+        if final_status == 'failed':
+            sys.exit(1)
+        if final_status == 'partial':
+            sys.exit(2)
+
     except Exception as e:
         print(f"FATAL ERROR in iterative manager: {e}")
         with open(manager_log, 'a') as f:
             f.write(f"FATAL ERROR: {e}\n")
+        _write_final_status(master_result_dir, job_id, 'failed', 'manager',
+                            f'Iterative manager crashed: {e}')
+        _stamp_job_json(master_result_dir, 'failed', 'manager',
+                        f'Iterative manager crashed: {e}')
         sys.exit(1)
 ## --- END MODIFIED FUNCTION ---
 

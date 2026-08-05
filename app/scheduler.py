@@ -1,6 +1,18 @@
 # app/scheduler.py — in-process CPU-aware job scheduler + disk retention.
 # One gevent greenlet in the single gunicorn worker owns all job lifecycle.
-# job.json["status"] is the source of truth: queued -> running -> complete|stopped|failed.
+# job.json["status"] is the source of truth:
+#   queued -> running -> complete|partial|stopped|failed.
+#
+# 'partial' means: the computation produced usable per-design results, but the final
+# aggregated score table (tab2_final_scores.csv) is missing or incomplete. The manager
+# records this in final_status.json before zipping; _finalize folds it into job.json.
+#
+# WIRE COMPATIBILITY: 'partial' is NOT emitted on the API until PREDPEP_PARTIAL_STATUS
+# is enabled. The DDN client maps unrecognised /status values to *running* and polls
+# without a wall-clock timeout, so emitting a new value before that client ships support
+# would make it poll a finished job forever. Until then partial jobs report status
+# "Complete" alongside partial=true + failed_stage, which every existing consumer
+# ignores safely. See docs/incident-SPILRH_c70d2d4c.md.
 import os
 import json
 import time
@@ -31,7 +43,24 @@ RETENTION_DAYS = int(os.environ.get('PREDPEP_RETENTION_DAYS', 180))
 # MUST mirror MAX_ITERATIONS in pipeline/run_iteMAN.py — update both together.
 MAX_ITERATIONS = 6
 
-TERMINAL = ('complete', 'stopped', 'failed')
+TERMINAL = ('complete', 'partial', 'stopped', 'failed')
+
+# Written by run_iteMAN.py before zipping; also travels inside the result zip so the
+# failure is diagnosable offline without parsing a traceback out of manager_stderr.log.
+FINAL_STATUS_FILE = 'final_status.json'
+
+_STATUS_DISPLAY = {'queued': 'Queued', 'running': 'Running', 'complete': 'Complete',
+                   'partial': 'Partial', 'stopped': 'Stopped', 'failed': 'Failed'}
+
+# Result files worth advertising to a client that needs to salvage a partial run.
+_ARTIFACT_GLOBS = ('*.all.txt', 'tab2_final_scores.csv', 'non_mc_pdbs.csv',
+                   'all_model_scores.csv', 'processed_peptide_scores.csv',
+                   'aggregation_report.json', FINAL_STATUS_FILE)
+
+
+def _emit_partial():
+    """Whether the API may emit the 'partial' status value (see module header)."""
+    return os.environ.get('PREDPEP_PARTIAL_STATUS', '0').lower() not in ('0', '', 'false', 'no')
 
 _queue = []        # job_ids awaiting cores (FIFO)
 _running = {}       # job_id -> reserved cpus
@@ -85,6 +114,31 @@ def count_iterations(job_id):
     return best
 
 
+def _read_final_status(job_id):
+    """The manager's own verdict on the final stages, or {} if it never wrote one."""
+    try:
+        with open(os.path.join(_jdir(job_id), FINAL_STATUS_FILE)) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _list_artifacts(job_id):
+    """Names of salvageable result files, captured before _post_zip_cleanup removes
+    them, so a client knows what the zip contains without downloading it."""
+    d = _jdir(job_id)
+    names = []
+    for pattern in _ARTIFACT_GLOBS:
+        for p in sorted(glob.glob(os.path.join(d, pattern))):
+            names.append(os.path.basename(p))
+    if glob.glob(os.path.join(d, '**', '*_B.fasta'), recursive=True):
+        names.append('*_B.fasta')
+    if glob.glob(os.path.join(d, '**', '*.spec'), recursive=True):
+        names.append('*.spec')
+    return names
+
+
 def _finalize(job_id, status):
     """Mark a job terminal and record progress: stamp completed_at + iterations_done
     once, plus a finish_reason for completed jobs (limit vs early). MUST run before
@@ -97,11 +151,22 @@ def _finalize(job_id, status):
         meta['iterations_done'] = count_iterations(job_id)
     if status == 'complete':
         meta['finish_reason'] = 'limit' if meta.get('iterations_done', 0) >= MAX_ITERATIONS else 'early'
+    # Carry the manager's failure reason into job.json so a consumer never has to dig
+    # a traceback out of manager_stderr.log inside the result zip.
+    final = _read_final_status(job_id)
+    if final.get('failed_stage'):
+        meta['failed_stage'] = final['failed_stage']
+    if final.get('message'):
+        meta['message'] = final['message']
+    if 'artifacts' not in meta:
+        meta['artifacts'] = _list_artifacts(job_id)
     try:
         with open(os.path.join(_jdir(job_id), 'job.json'), 'w') as f:
             json.dump(meta, f)
-    except Exception:
-        pass
+    except Exception as e:
+        # Never silent: a swallowed write here leaves a finished job reading
+        # "running" forever, which is exactly what happened to SPILRH_c70d2d4c.
+        print('[scheduler] FAILED to finalize %s as %s: %s' % (job_id, status, e), flush=True)
 
 
 def _du_bytes(path):
@@ -193,8 +258,19 @@ def _launch(job_id):
 
 
 def _terminal_for_dead(job_id):
+    """Terminal state for a job whose manager is no longer running.
+
+    A zip is proof that the run finished, NOT that it succeeded: the manager kept
+    zipping and exiting 0 after a fatal aggregation error. Its own verdict in
+    final_status.json wins when present; jobs predating that file fall back to the
+    old zip-existence rule.
+    """
     d = _jdir(job_id)
-    if os.path.exists(os.path.join(d, '%s.zip' % job_id)):
+    has_zip = os.path.exists(os.path.join(d, '%s.zip' % job_id))
+    verdict = _read_final_status(job_id).get('status')
+    if verdict in TERMINAL:
+        return verdict if verdict != 'complete' or has_zip else 'failed'
+    if has_zip:
         return 'complete'
     if os.path.exists(os.path.join(d, 'STOPPED')):
         return 'stopped'
@@ -288,6 +364,50 @@ def _sweep():
                 shutil.rmtree(os.path.join(BASE_UPLOAD_FOLDER, entry), ignore_errors=True)
                 total -= sz
     _disk_used = max(0, total)
+
+
+def public_status(job_id):
+    """The job's externally visible state — the single place status is shaped for the
+    API and the UI.
+
+    Self-heals a job left reading "running" whose manager is gone (SPILRH_c70d2d4c's
+    job.json still said "running" 14 h after it ended), and applies the 'partial' wire
+    gate described in the module header.
+    """
+    d = _jdir(job_id)
+    raw = _read_meta(job_id).get('status')
+
+    if raw is None:                                  # pre-status job: derive once
+        raw = _terminal_for_dead(job_id)
+        _set_status(job_id, raw)
+    elif raw == 'running' and not _manager_alive(job_id):
+        raw = _terminal_for_dead(job_id)
+        _finalize(job_id, raw)
+
+    meta = _read_meta(job_id)
+    # Reason lives in job.json once finalised; fall back to the manager's own file so
+    # the reason survives even if the merge into job.json never happened.
+    final = _read_final_status(job_id)
+    failed_stage = meta.get('failed_stage') or final.get('failed_stage')
+    message = meta.get('message') or final.get('message')
+    partial = (raw == 'partial')
+    disp = _STATUS_DISPLAY.get(raw, 'Running')
+    if partial and not _emit_partial():
+        disp = 'Complete'                            # compatible wire value + flags below
+
+    has_zip = os.path.exists(os.path.join(d, '%s.zip' % job_id))
+    return {
+        'status': disp,
+        'partial': partial,
+        'failed_stage': failed_stage,
+        'message': message,
+        # Recorded at finalize time (before cleanup removes them); scanned live for
+        # jobs the manager stamped terminal itself.
+        'artifacts': meta.get('artifacts') or _list_artifacts(job_id),
+        # Results stay retrievable for every terminal state that produced a zip —
+        # a stopped or partial run must not strand the user's own results.
+        'download_url': ('/download/%s/%s.zip' % (job_id, job_id)) if has_zip else None,
+    }
 
 
 def get_state():

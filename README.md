@@ -45,7 +45,7 @@ Takes ~5–10 min on a fresh build (Rosetta tar extraction is the bottleneck). F
 
 ## Versioning
 
-The image version lives in the **`VERSION`** file (currently `v1.3.0`) — the single source of truth. `./scripts/build.sh` tags the build `predpep:$(cat VERSION)` **and** `predpep:latest`; `run.sh` / `run-dev.sh` launch the versioned tag. To cut a new release, bump `VERSION` (and the `image:` pin in `docker-compose.yml`), rebuild, and re-export the tarball. Commands below hard-code `v1.3.0`; substitute the current version.
+The image version lives in the **`VERSION`** file (currently `v1.4.0`) — the single source of truth. `./scripts/build.sh` tags the build `predpep:$(cat VERSION)` **and** `predpep:latest`; `run.sh` / `run-dev.sh` launch the versioned tag. To cut a new release, bump `VERSION` (and the `image:` pin in `docker-compose.yml`), rebuild, and re-export the tarball. Commands below hard-code `v1.3.0`; substitute the current version.
 
 ## Daily use
 
@@ -70,6 +70,12 @@ A **Jobs** tab lists every job on the machine (date, submission details, status,
 - `PREDPEP_CORE_BUDGET` — max CPU cores the node will commit across running jobs (default: the machine's core count). Web-submitted jobs reserve their CPU count and queue when the budget is full.
 - `PREDPEP_RETENTION_BYTES` / `PREDPEP_RETENTION_DAYS` — job-storage caps (default 50 GB / 180 days). Oldest finished jobs are evicted first; completed jobs keep only their result `.zip`.
 - `PREDPEP_MEMORY` — optional Docker memory cap (e.g. `PREDPEP_MEMORY=32g`), passed to `--memory`.
+- `PREDPEP_PARTIAL_STATUS` — set to `1` to let `/status` and `/jobs` emit the distinct **`Partial`**
+  status for a job whose final score aggregation failed. **Default off:** partial jobs report
+  `Complete` with `partial: true` + `failed_stage`, so existing consumers are unaffected. Only
+  enable it once every consumer treats `Partial` as terminal — a client that maps unknown statuses
+  to *running* would otherwise poll a finished job forever. See
+  [docs/incident-SPILRH_c70d2d4c.md](docs/incident-SPILRH_c70d2d4c.md).
 - **Auto-heal:** the gunicorn worker preloads the app to avoid the fork-time boot wedge; for an unattended fleet, also run a restarter that reacts to `health=unhealthy` (e.g. the `willfarrell/autoheal` sidecar, or have your orchestrator `docker restart` a node whose `/health` fails).
 
 ## Code iteration
@@ -84,6 +90,17 @@ Launches `predpep_app_dev` with `app/` and `pipeline/` bind-mounted from the hos
 - HTML/JS in `templates/` and `static/` → picked up on the next request
 
 Uses the same port 6363, so it can't coexist with `predpep_app` — stop the other one first.
+
+### Tests
+
+```
+python3 -m pytest tests/ -q
+```
+
+Runs on the host — needs only `pandas` + `pytest`, no Flask and no container. The suite is the
+regression net for the `SPILRH_c70d2d4c` incident (corrupted `.spec` handling, degraded score
+tables, and honest job status); see [docs/incident-SPILRH_c70d2d4c.md](docs/incident-SPILRH_c70d2d4c.md).
+It writes throwaway job dirs under `/tmp/pepspec/results/SPTEST_*` and removes them afterwards.
 
 ## Stopping / updating / tearing down
 

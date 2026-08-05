@@ -110,6 +110,9 @@
         .status-processing { color: #b06000; }
         .status-queued { color: #555; }
         .status-stopped { color: #c5221f; font-weight: bold; }
+        /* Partial: results exist and are downloadable, but the final score table is
+           missing or incomplete — neither a green Complete nor a red Failed. */
+        .status-partial { color: #b06000; font-weight: bold; }
         .iter-reason { display: block; font-size: 0.78em; color: #888; }
         .job-delete { background: #c5221f; color: #fff; border: none; padding: 3px 8px; cursor: pointer; border-radius: 3px; }
         .job-stop { background: #b06000; color: #fff; border: none; padding: 3px 8px; cursor: pointer; border-radius: 3px; }

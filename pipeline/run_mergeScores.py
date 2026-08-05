@@ -2,12 +2,79 @@
 
 import pandas as pd
 import os
+import re
 import sys
 import shutil
 
 # --- Configuration ---
 ROSETTA_INPUT_FILE = "non_mc_pdbs.csv" # Source of Rosetta scores, pepSeq, and paths
 OUTPUT_CLEANED_CSV = "tab2_final_scores.csv" # Target file for client-side JavaScript
+
+# Strips the per-model suffix from a FoldX pdbId to get the design base:
+# 'SPILRH1Q672F1_7.pdb' / 'SPILRH1Q672F1_7.mod.pdb' -> 'SPILRH1Q672F1'
+_MODEL_SUFFIX = re.compile(r'_\d+(\.mod)?\.pdb$', re.IGNORECASE)
+
+
+def _design_base(pdb_id):
+    return _MODEL_SUFFIX.sub('', str(pdb_id))
+
+
+def _scan_job_tree(root='.'):
+    """One walk of the job dir collecting what the Rosetta aggregate would have given us:
+    the designed peptide sequence per design (from the chain-B fastas clean_pdb.py writes)
+    and a basename -> job-relative path index for the model PDBs.
+
+    Returns (sequences, pdb_paths). Paths are prefixed with the job dir name to match the
+    format produced by run_catSPEC.py, which /stream_final_pdb expects.
+    """
+    sequences = {}
+    pdb_paths = {}
+    job_dir_name = os.path.basename(os.path.abspath(root))
+    for dirpath, _dirnames, filenames in os.walk(root):
+        for name in filenames:
+            if name.endswith('_B.fasta'):
+                design = name[:-len('_B.fasta')]
+                if design in sequences:
+                    continue
+                try:
+                    with open(os.path.join(dirpath, name), encoding='utf-8', errors='replace') as f:
+                        seq = ''.join(l.strip() for l in f if not l.startswith('>'))
+                except OSError:
+                    continue
+                if seq:
+                    sequences[design] = seq
+            elif name.endswith('.pdb') and name not in pdb_paths:
+                rel = os.path.relpath(os.path.join(dirpath, name), root)
+                pdb_paths[name] = os.path.join(job_dir_name, rel)
+    return sequences, pdb_paths
+
+
+def _write_foldx_only(df_foldx, output_file):
+    """Emit the score table we CAN build when Rosetta aggregation produced nothing.
+
+    Rosetta_Total_Score is left EMPTY -- never 0 and never invented -- and the
+    degradation is marked in-band via rosetta_available so a consumer reading only
+    the CSV can tell it is partial.
+    """
+    print("⚠️ Building a FoldX-only score table (Rosetta scores unavailable).")
+    sequences, pdb_paths = _scan_job_tree('.')
+
+    df = df_foldx[['pdbId', 'FoldX_Score']].copy()
+    df['pepSeq'] = df['pdbId'].map(lambda p: sequences.get(_design_base(p), ''))
+    df['pdb_relative_path'] = df['pdbId'].map(lambda p: pdb_paths.get(str(p), ''))
+    df['Rosetta_Total_Score'] = pd.NA          # -> empty cell in the CSV
+    df['rosetta_available'] = False
+
+    df = df[['pdbId', 'pepSeq', 'pdb_relative_path', 'FoldX_Score',
+             'Rosetta_Total_Score', 'rosetta_available']]
+    df.to_csv(output_file, index=False)
+
+    missing_seqs = int((df['pepSeq'] == '').sum())
+    print(f"💾 Degraded score table saved to **{output_file}** ({len(df)} rows, "
+          f"Rosetta scores empty).")
+    if missing_seqs:
+        print(f"⚠️ {missing_seqs} row(s) have no recoverable peptide sequence.")
+    return df
 
 def merge_and_clean_scores(foldx_file, rosetta_file, output_file):
     
@@ -25,10 +92,14 @@ def merge_and_clean_scores(foldx_file, rosetta_file, output_file):
     df_foldx = pd.read_csv(foldx_file, sep='\s+', header=None, names=['pdbId', 'FoldX_Score'], usecols=[0, 1])
     
     # 2. Load Rosetta Data (includes pepSeq and pdb_relative_path)
+    # If it is missing the aggregation step failed, but the FoldX ranking above is
+    # still valid: emit a degraded table rather than nothing at all (job
+    # SPILRH_c70d2d4c produced 4,795 scored designs and no score table).
     if not os.path.exists(rosetta_file):
-        print(f"❌ Rosetta scores file not found: {rosetta_file}. Skipping merge.")
-        return None
-        
+        print(f"❌ Rosetta scores file not found: {rosetta_file}. Falling back to FoldX-only table.")
+        return _write_foldx_only(df_foldx, output_file)
+
+
     print(f"📂 Loading Rosetta scores from {rosetta_file}...")
     df_rosetta = pd.read_csv(rosetta_file)
 
@@ -73,8 +144,17 @@ def merge_and_clean_scores(foldx_file, rosetta_file, output_file):
     df_final = df_merged[cols_to_select]
     
     # Rename columns to match the table headers expected by tab2_results_table.js
-    df_final.rename(columns={'total_score': 'Rosetta_Total_Score'}, inplace=True)
-    
+    df_final = df_final.rename(columns={'total_score': 'Rosetta_Total_Score'})
+
+    # Per-row provenance flag: a left join leaves unmatched designs without a Rosetta
+    # score, and those cells stay empty rather than being filled with a placeholder.
+    if 'Rosetta_Total_Score' in df_final.columns:
+        df_final['rosetta_available'] = df_final['Rosetta_Total_Score'].notna()
+    else:
+        df_final['Rosetta_Total_Score'] = pd.NA
+        df_final['rosetta_available'] = False
+
+
     # 6. Save the final merged data
     df_final.to_csv(output_file, index=False)
     print(f"💾 Merged score data saved to **{output_file}**")
@@ -140,7 +220,12 @@ if __name__ == "__main__":
         base_only = master_pdb_base
 
     FOLDX_INPUT_FILE = f"{base_only}.all.txt"
-    
+
     # ----------------------------------------------------------------------------------
 
-    merge_and_clean_scores(FOLDX_INPUT_FILE, ROSETTA_INPUT_FILE, OUTPUT_CLEANED_CSV)
+    result = merge_and_clean_scores(FOLDX_INPUT_FILE, ROSETTA_INPUT_FILE, OUTPUT_CLEANED_CSV)
+
+    # Exiting 0 without producing the score table is what let a broken run look clean.
+    if result is None or not os.path.exists(OUTPUT_CLEANED_CSV):
+        print(f"🛑 No score table produced ({OUTPUT_CLEANED_CSV} missing).", file=sys.stderr)
+        sys.exit(1)

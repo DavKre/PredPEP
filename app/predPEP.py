@@ -187,23 +187,28 @@ def upload_file():
 
 @predPEP.route('/status/<job_id>', methods=['GET'])
 def check_status(job_id):
-    """Checks for the existence of the final zipped result."""
+    """Report the job's real outcome.
+
+    A result zip used to be treated as proof of success, so a run whose final score
+    aggregation had crashed still reported "Complete" (job SPILRH_c70d2d4c). The
+    verdict now comes from the scheduler, together with a machine-readable
+    failed_stage so a consumer never has to parse a traceback out of the zip.
+    """
     master_pdb_base = get_master_id(job_id)
     master_result_dir = os.path.join(BASE_RESULT_FOLDER, master_pdb_base)
-    zip_filename = f"{job_id}.zip"
-    output_zip_path = os.path.join(master_result_dir, zip_filename)
 
-    if os.path.exists(output_zip_path):
-        return jsonify({
-            'status': 'Complete',
-            'download_url': f'/download/{master_pdb_base}/{zip_filename}'
-        })
-    else:
-        if os.path.exists(master_result_dir):
-            disp, dl = _display_status(master_result_dir, master_pdb_base)
-            return jsonify({'status': disp, 'download_url': dl,
-                            'message': f'Job {disp.lower()}.'})
+    if not os.path.exists(master_result_dir):
         return jsonify({'status': 'Pending/Failed', 'message': 'Job failed to start.'})
+
+    view = scheduler.public_status(master_pdb_base)
+    return jsonify({
+        'status': view['status'],
+        'download_url': view['download_url'],
+        'partial': view['partial'],
+        'failed_stage': view['failed_stage'],
+        'artifacts': view['artifacts'],
+        'message': view['message'] or f"Job {view['status'].lower()}.",
+    })
 
 @predPEP.route('/results_data/<job_id>', methods=['GET'])
 def get_results_data(job_id):
@@ -308,30 +313,6 @@ def get_tmap_tree(job_id):
         print(f"TMAP Tree Error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-_STATUS_DISPLAY = {'queued': 'Queued', 'running': 'Running', 'complete': 'Complete',
-                   'stopped': 'Stopped', 'failed': 'Failed'}
-
-def _display_status(jdir, entry):
-    """Return (display_status, download_url) from job.json status (scheduler-owned),
-    falling back to filesystem markers for any job without a status field."""
-    raw = None
-    try:
-        with open(os.path.join(jdir, 'job.json')) as f:
-            raw = json.load(f).get('status')
-    except Exception:
-        raw = None
-    if raw is None:
-        if os.path.exists(os.path.join(jdir, f"{entry}.zip")):
-            raw = 'complete'
-        elif os.path.exists(os.path.join(jdir, 'STOPPED')):
-            raw = 'stopped'
-        else:
-            raw = 'running'
-    disp = _STATUS_DISPLAY.get(raw, 'Running')
-    dl = f"/download/{entry}/{entry}.zip" if (raw == 'complete' and os.path.exists(os.path.join(jdir, f"{entry}.zip"))) else None
-    return disp, dl
-
-
 @predPEP.route('/jobs', methods=['GET'])
 def list_jobs():
     """List all jobs (newest first) with derived status — no auth, all jobs visible."""
@@ -350,8 +331,14 @@ def list_jobs():
                 except Exception:
                     meta = {}
             meta.setdefault('job_id', entry)
-            disp, dl = _display_status(jdir, entry)
-            meta['status'], meta['download_url'] = disp, dl
+            view = scheduler.public_status(entry)
+            disp = view['status']
+            meta['status'] = disp
+            meta['download_url'] = view['download_url']
+            meta['partial'] = view['partial']
+            meta['failed_stage'] = view['failed_stage']
+            meta['message'] = view['message']
+            meta['artifacts'] = view['artifacts']
             # Iteration progress: live count while running, captured value once terminal.
             if disp == 'Running':
                 meta['iteration'] = scheduler.count_iterations(entry)

@@ -23,8 +23,67 @@ import signal
 import subprocess
 from datetime import datetime, timezone
 
-BASE_UPLOAD_FOLDER = '/tmp/pepspec/uploads'
-BASE_RESULT_FOLDER = '/tmp/pepspec/results'
+# Read from the environment so this module and predPEP.py cannot disagree about
+# where jobs live: a mismatch makes every job invisible to the web layer while
+# the scheduler happily runs it. Defaults are the historical hardcoded paths, so
+# behaviour is unchanged when the variables are unset. run_catSPEC.py has its own
+# copy of BASE_RESULT_FOLDER and must be kept in step too -- it uses it to build
+# pdb_relative_path, which /stream_final_pdb resolves against.
+BASE_UPLOAD_FOLDER = os.environ.get('PREDPEP_UPLOAD_DIR', '/tmp/pepspec/uploads')
+BASE_RESULT_FOLDER = os.environ.get('PREDPEP_RESULT_DIR', '/tmp/pepspec/results')
+
+
+# How many cores stay free for everything that is not a pepspec job. Applies
+# only when no cgroup quota is set -- see _default_budget below.
+CORE_RESERVE = int(os.environ.get('PREDPEP_CORE_RESERVE', '4'))
+
+
+def _cgroup_quota():
+    """Cores this process may use under its cgroup, or None if unlimited.
+
+    `docker run --cpus N` writes a bandwidth limit, not an affinity mask, so
+    os.sched_getaffinity() cannot see it -- inside the container it still
+    reports every core on the host. The limit has to be read from the cgroup.
+
+    cgroup v2 stores "<quota> <period>" (or "max") in cpu.max; v1 splits it
+    across cpu.cfs_quota_us and cpu.cfs_period_us, with -1 meaning unlimited.
+    Both are tried, under this process's own cgroup first and the filesystem
+    root second, because a container's cgroup namespace makes the root its own
+    limit while a systemd service on bare metal has its limit one level down.
+    """
+    try:
+        rel = open('/proc/self/cgroup').read().split('\n')[0].split(':')[-1]
+    except (OSError, IndexError):
+        rel = '/'
+    roots = []
+    for r in (os.path.join('/sys/fs/cgroup', rel.lstrip('/')), '/sys/fs/cgroup'):
+        if r not in roots:
+            roots.append(r)
+
+    for root in roots:
+        # cgroup v2
+        try:
+            quota, period = open(os.path.join(root, 'cpu.max')).read().split()
+        except (OSError, ValueError):
+            pass
+        else:
+            if quota != 'max':
+                try:
+                    cores = int(quota) // int(period)
+                except (ValueError, ZeroDivisionError):
+                    cores = 0
+                if cores >= 1:
+                    return cores
+            continue  # an explicit "max" here means unlimited, not "look higher"
+        # cgroup v1
+        try:
+            quota = int(open(os.path.join(root, 'cpu.cfs_quota_us')).read().strip())
+            period = int(open(os.path.join(root, 'cpu.cfs_period_us')).read().strip())
+        except (OSError, ValueError):
+            continue
+        if quota > 0 and period > 0 and quota // period >= 1:
+            return quota // period
+    return None
 
 
 def _detect_cores():
@@ -34,14 +93,83 @@ def _detect_cores():
         return os.cpu_count() or 4
 
 
-CORE_BUDGET = int(os.environ.get('PREDPEP_CORE_BUDGET', _detect_cores()))
+def _default_budget():
+    """Cores predPEP will hand out when PREDPEP_CORE_BUDGET is unset.
+
+    Two cases, deliberately different:
+
+      * A cgroup quota IS an allocation somebody already made for this
+        container. `--cpus 20` means twenty, and holding a reserve back from
+        it would silently shrink an explicit decision. Use it as given.
+
+      * No quota means predPEP is sharing the machine with the host and
+        whatever else runs there, so CORE_RESERVE cores (4 by default) stay
+        free. That keeps the dashboard, the healthcheck and the database
+        answering while a job has every other core at 100%. On a host running
+        an autoheal sidecar this is not cosmetic: a healthcheck that times out
+        gets the container restarted, and a restart mid-job costs hours of
+        pepspec.
+
+    The quota must never be smaller than the budget. If it is, the scheduler
+    admits work the kernel then throttles, and the job runs slower than one
+    sized honestly -- with nothing in the dashboard to say why. Whoever sets
+    `--cpus` is therefore setting the budget too, which is the point of
+    deriving it here instead of carrying a second number in the environment.
+    """
+    quota = _cgroup_quota()
+    if quota:
+        return quota
+    return max(2, _detect_cores() - CORE_RESERVE)
+
+
+# An EMPTY value counts as unset. Wrappers pass empty strings through without
+# meaning to -- compose writes PREDPEP_CORE_BUDGET: "${PREDPEP_CORE_BUDGET:-}"
+# and a shell exports a blank variable just as readily -- and int('') raises at
+# import, which would take the whole app down rather than fall back.
+_budget_env = os.environ.get('PREDPEP_CORE_BUDGET', '').strip()
+if _budget_env:
+    try:
+        CORE_BUDGET = int(_budget_env)
+    except ValueError:
+        print('[scheduler] PREDPEP_CORE_BUDGET=%r is not a number; '
+              'deriving from the host instead' % _budget_env, flush=True)
+        CORE_BUDGET = _default_budget()
+else:
+    CORE_BUDGET = _default_budget()
 RETENTION_BYTES = int(os.environ.get('PREDPEP_RETENTION_BYTES', 50 * 1024 ** 3))
 RETENTION_DAYS = int(os.environ.get('PREDPEP_RETENTION_DAYS', 180))
 
+# Where an evicted job is kept after it leaves the results directory.
+#
+# Set PREDPEP_ARCHIVE_DIR to a mounted path when one is available. Until then
+# the default is a local directory, NOT an empty value: an unset archive must
+# not mean "delete without keeping a copy". If the archive cannot be written,
+# the job is left exactly where it is -- see _archive_job.
+ARCHIVE_DIR = (os.environ.get('PREDPEP_ARCHIVE_DIR') or '').strip() \
+    or '/var/lib/spacepep-predpep/archive'
+
+# What to carry into the archive. The zip is the complete record of a run; the
+# rest are the small files the dashboard reads, so an archived job can still be
+# listed and inspected without unpacking anything.
+ARCHIVE_KEEP_SUFFIXES = ('.zip', '.all.txt', '.old.txt')
+ARCHIVE_KEEP_NAMES = (
+    'job.json', 'tab2_final_scores.csv', 'tab2_filtered_scores.csv',
+    'filter_report.json', 'final_status.json', 'aggregation_report.json',
+    'lineage.json', 'design_spec.json', 'all_model_scores.csv',
+    'non_mc_pdbs.csv', 'iteration_metrics.json',
+)
+
 # Iteration cap, shown in the Jobs table as "N / MAX_ITERATIONS" and used to
 # infer the finish reason (count >= cap -> limit reached, else early stop).
-# MUST mirror MAX_ITERATIONS in pipeline/run_iteMAN.py — update both together.
-MAX_ITERATIONS = 6
+#
+# Read from the environment rather than hardcoded in two files; run_iteMAN.py
+# reads the same variable and inherits this process's environment, so the
+# denominator shown in the Jobs table cannot disagree with the number of
+# rounds the manager will actually run.
+try:
+    MAX_ITERATIONS = max(1, int(os.environ.get('PREDPEP_MAX_ITERATIONS', 6)))
+except (TypeError, ValueError):
+    MAX_ITERATIONS = 6
 
 TERMINAL = ('complete', 'partial', 'stopped', 'failed')
 
@@ -277,15 +405,130 @@ def _terminal_for_dead(job_id):
     return 'failed'
 
 
+# Files the dashboard reads AFTER a job finishes. The old cleanup kept only the
+# zip and job.json, which deleted every one of these -- so a job that completed
+# cleanly showed "Results not found yet" on the Results page and "unavailable" on
+# all five analytics panels, while a job that ended PARTIAL displayed fine
+# (cleanup only runs for 'complete'). The zip is still the archive; these are the
+# few small files that keep the finished job viewable without unpacking it.
+#
+# Everything bulky still goes: the .pdbs model directories, the .spec files, the
+# per-run logs. On a save_all_pdbs job that is tens of GB reclaimed and a few MB
+# kept.
+_KEEP_JOB_FILES = {
+    'job.json',
+    'tab2_final_scores.csv',      # Results table + most analytics
+    'tab2_filtered_scores.csv',   # post-run filter subset
+    'filter_report.json',         # what was filtered and why
+    'all_model_scores.csv',       # analytics: correlation, PCA, logo
+    'non_mc_pdbs.csv',            # fallback score source
+    'final_status.json',          # the manager's own verdict
+    'aggregation_report.json',    # run_catSPEC.py damage report
+    'lineage.json',               # provenance chain
+    'design_spec.json',           # what was submitted
+    'iteration_metrics.json',     # live/iteration progress
+    'tab3_ncaa_designs.csv',      # NCAA design pass: the Results table reads it
+    'ncaa_design_report.json',    # NCAA design pass: palette, interface, failures
+}
+# Suffixes kept at job level: the FoldX master tables, whatever the evolved
+# PDB_BASE happens to be called.
+_KEEP_JOB_SUFFIXES = ('.all.txt', '.old.txt')
+# Inside each iteration directory, keep only these small records. The directory
+# itself is kept (empty of bulk) so /jobs/<id>/metrics can still find them.
+_KEEP_ITER_FILES = {'flags_manifest.json', 'runs_status.json',
+                    'foldx_status.json', 'iteration_metrics.json'}
+
+
 def _post_zip_cleanup(job_id):
-    """Keep only <job>.zip + job.json in the result dir; drop the uploads dir."""
+    """Reclaim the bulk of a finished job, keeping what the dashboard reads.
+
+    The zip remains the complete archive. See _KEEP_JOB_FILES for why this is a
+    selective sweep rather than "keep the zip and nothing else".
+    """
     d = _jdir(job_id)
-    keep = {'%s.zip' % job_id, 'job.json'}
+    keep = set(_KEEP_JOB_FILES) | {'%s.zip' % job_id}
     try:
         for name in os.listdir(d):
-            if name in keep:
-                continue
             p = os.path.join(d, name)
+            if os.path.isdir(p):
+                # An iteration directory: strip it to its small records rather
+                # than removing it, so flags_manifest.json survives.
+                if '_iter' in name:
+                    _strip_iteration_dir(p)
+                elif name == 'top10':
+                    # The ten best models, a few MB. Kept because the Results
+                    # page streams structures for the viewer, and the model PDBs
+                    # it references inside the iteration dirs are being removed
+                    # here. Without this, a finished job has a score table and
+                    # no viewable structures at all.
+                    continue
+                elif name == 'ncaa_designs':
+                    # The NCAA design pass. Stripped rather than removed,
+                    # because tab3_ncaa_designs.csv points the Results viewer
+                    # at ncaa_*.pdb inside it by relative path.
+                    _strip_ncaa_dir(p)
+                else:
+                    # DELIBERATELY NOT rmtree, which is what this branch used
+                    # to do. Deleting every directory it did not recognise
+                    # destroyed the NCAA design pass -- designs, score files
+                    # and table -- two minutes after it wrote them, leaving the
+                    # job looking as though the pass had never run. A sweep
+                    # whose default is to delete the unknown does that to
+                    # every future addition, so the default is now to keep.
+                    # The bulk is in the iteration dirs, still stripped above.
+                    continue
+                continue
+            if name in keep or name.endswith(_KEEP_JOB_SUFFIXES):
+                continue
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+    except Exception:
+        pass
+    shutil.rmtree(os.path.join(BASE_UPLOAD_FOLDER, job_id), ignore_errors=True)
+
+
+# Kept anywhere under ncaa_designs/: the score files the deltas were computed
+# from, the generated protocols, and the run logs. All small.
+_KEEP_NCAA_SUFFIXES = ('.sc', '.xml', '.log', '.json')
+# PDB prefixes that are OUTPUT. Anything else ending .pdb under ncaa_designs/
+# is the copy of the input model rosetta_scripts was handed, which already
+# exists in top10/ or an iteration dir -- three copies per model, ~830 KB each.
+_KEEP_NCAA_PDB_PREFIXES = ('ncaa_', 'ctrl_', 'base_')
+
+
+def _strip_ncaa_dir(path):
+    """Keep every designed structure and every number; drop duplicated inputs.
+
+    Deliberately conservative about what it removes. The control and baseline
+    PDBs are kept even though no table references them, because they are the
+    structures the reported deltas are differences BETWEEN, and this function
+    exists because the previous sweep was too eager.
+    """
+    try:
+        for root, _dirs, files in os.walk(path):
+            for name in files:
+                keep = (name.endswith(_KEEP_NCAA_SUFFIXES)
+                        or (name.endswith('.pdb')
+                            and name.startswith(_KEEP_NCAA_PDB_PREFIXES)))
+                if keep:
+                    continue
+                try:
+                    os.remove(os.path.join(root, name))
+                except OSError:
+                    pass
+    except Exception:
+        pass
+
+
+def _strip_iteration_dir(path):
+    """Delete everything in an iteration dir except its small JSON records."""
+    try:
+        for name in os.listdir(path):
+            if name in _KEEP_ITER_FILES:
+                continue
+            p = os.path.join(path, name)
             if os.path.isdir(p):
                 shutil.rmtree(p, ignore_errors=True)
             else:
@@ -295,7 +538,6 @@ def _post_zip_cleanup(job_id):
                     pass
     except Exception:
         pass
-    shutil.rmtree(os.path.join(BASE_UPLOAD_FOLDER, job_id), ignore_errors=True)
 
 
 def _tick():
@@ -326,6 +568,103 @@ def _tick():
             reserved += got
 
 
+def _archive_job(job_id):
+    """Copy a job's records into the archive and VERIFY them. True on success.
+
+    Deletion is gated on this returning True. An archive step that silently
+    fails and then deletes is worse than having no retention policy at all, so
+    every file is size-checked after the copy and any shortfall aborts the whole
+    archive -- the job then stays in the results directory and the next sweep
+    tries again.
+
+    The zip is copied rather than moved, so an interruption leaves the original
+    intact; the original is removed by the caller only after this returns True.
+    """
+    src = _jdir(job_id)
+    dest = os.path.join(ARCHIVE_DIR, job_id)
+    try:
+        os.makedirs(dest, exist_ok=True)
+    except OSError as e:
+        print('[scheduler] archive unavailable (%s): %s — keeping %s'
+              % (ARCHIVE_DIR, e, job_id), flush=True)
+        return False
+
+    wanted = []
+    try:
+        for name in os.listdir(src):
+            p = os.path.join(src, name)
+            if not os.path.isfile(p):
+                continue
+            if name in ARCHIVE_KEEP_NAMES or name.endswith(ARCHIVE_KEEP_SUFFIXES):
+                wanted.append(name)
+    except OSError as e:
+        print('[scheduler] cannot read %s for archiving: %s' % (job_id, e), flush=True)
+        return False
+
+    if not wanted:
+        # Nothing worth keeping is not the same as "archive succeeded". Refuse,
+        # so a job whose records are already gone is not quietly deleted on the
+        # strength of an empty archive.
+        print('[scheduler] %s has no archivable records; keeping it' % job_id,
+              flush=True)
+        return False
+
+    copied = []
+    for name in wanted:
+        s, d = os.path.join(src, name), os.path.join(dest, name)
+        try:
+            shutil.copy2(s, d)
+            if os.path.getsize(d) != os.path.getsize(s):
+                raise OSError('size mismatch after copy')
+            copied.append(name)
+        except OSError as e:
+            print('[scheduler] archive of %s failed on %s: %s — keeping the job'
+                  % (job_id, name, e), flush=True)
+            return False
+
+    # An index line per archived job, so the archive is readable without
+    # listing directories and a future dashboard view can enumerate it.
+    try:
+        meta = _read_meta(job_id)
+        with open(os.path.join(ARCHIVE_DIR, 'archive_index.jsonl'), 'a') as f:
+            f.write(json.dumps({
+                'job_id': job_id,
+                'archived_at': time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime()),
+                'status': meta.get('status'),
+                'completed_at': meta.get('completed_at'),
+                'submitted_at': meta.get('submitted_at'),
+                'protein_symbol': meta.get('protein_symbol'),
+                'files': copied,
+                'bytes': sum(os.path.getsize(os.path.join(dest, n)) for n in copied),
+            }) + '\n')
+    except (OSError, ValueError) as e:
+        # The records are safely copied; a missing index line is cosmetic and
+        # must not block the eviction.
+        print('[scheduler] archived %s but could not write the index: %s'
+              % (job_id, e), flush=True)
+
+    print('[scheduler] archived %s -> %s (%d file(s))'
+          % (job_id, dest, len(copied)), flush=True)
+    return True
+
+
+def _evict(job_id, reason):
+    """Archive, verify, then remove the job from the results directory.
+
+    Returns the bytes reclaimed, or 0 when the job was kept because the archive
+    could not be completed.
+    """
+    d = _jdir(job_id)
+    size = _du_bytes(d)
+    if not _archive_job(job_id):
+        return 0
+    shutil.rmtree(d, ignore_errors=True)
+    shutil.rmtree(os.path.join(BASE_UPLOAD_FOLDER, job_id), ignore_errors=True)
+    print('[scheduler] evicted %s (%s), %.1f MB reclaimed'
+          % (job_id, reason, size / (1024 ** 2)), flush=True)
+    return size
+
+
 def _sweep():
     """Enforce age + size retention. Only terminal jobs are evicted."""
     global _disk_used
@@ -348,21 +687,35 @@ def _sweep():
     total = sum(r[3] for r in rows) + _du_bytes(BASE_UPLOAD_FOLDER)
     now = time.time()
     age_limit = RETENTION_DAYS * 86400
+    # Age-based eviction. Archived and verified before removal; a job whose
+    # archive fails is left in place and retried on the next sweep.
     for r in rows:
         entry, st, mtime, sz = r
         if st in TERMINAL and (now - mtime) > age_limit and os.path.isdir(_jdir(entry)):
-            shutil.rmtree(_jdir(entry), ignore_errors=True)
-            shutil.rmtree(os.path.join(BASE_UPLOAD_FOLDER, entry), ignore_errors=True)
-            r[3] = 0
-            total -= sz
+            freed = _evict(entry, 'older than %d days' % RETENTION_DAYS)
+            if freed:
+                r[3] = 0
+                total -= sz
+
+    # Size-based eviction, oldest terminal job first. Same gate.
     if total > RETENTION_BYTES:
-        for entry, st, mtime, sz in sorted([r for r in rows if r[1] in TERMINAL], key=lambda x: x[2]):
+        for entry, st, mtime, sz in sorted(
+                [r for r in rows if r[1] in TERMINAL], key=lambda x: x[2]):
             if total <= RETENTION_BYTES:
                 break
             if os.path.isdir(_jdir(entry)):
-                shutil.rmtree(_jdir(entry), ignore_errors=True)
-                shutil.rmtree(os.path.join(BASE_UPLOAD_FOLDER, entry), ignore_errors=True)
-                total -= sz
+                freed = _evict(entry, 'over the %d GB cap'
+                               % (RETENTION_BYTES // (1024 ** 3)))
+                if freed:
+                    total -= sz
+                else:
+                    # Cannot archive, so cannot evict. Stop rather than walking
+                    # the whole list failing on each one; the cause (an
+                    # unwritable archive) is the same for all of them.
+                    print('[scheduler] size eviction halted: archive '
+                          'unavailable, %.1f GB still in use'
+                          % (total / (1024 ** 3)), flush=True)
+                    break
     _disk_used = max(0, total)
 
 

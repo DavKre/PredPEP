@@ -5,6 +5,7 @@ non_mc_pdbs.csv missing -> merge skipped -> tab2_final_scores.csv missing -> job
 and reported "Complete". Unit tests pin each link; this replays the whole chain by
 running the real scripts as subprocesses, the way run_iteMAN.py invokes them.
 """
+import csv
 import json
 import os
 import subprocess
@@ -130,9 +131,14 @@ def test_total_aggregation_failure_still_yields_a_usable_table(incident_job):
     merge = _run(MERGE, job_id, cwd=job_dir)
     assert merge.returncode == 0, merge.stderr
 
-    rows = open(os.path.join(job_dir, 'tab2_final_scores.csv')).read().splitlines()
-    assert len(rows) == N_DESIGNS + 1
-    assert all(r.endswith(',False') for r in rows[1:]), "degradation must be marked in-band"
+    # Read the marker by column name, not by position: v1.6.0 appends the
+    # post-filter columns (disulfide_ok / native_ok / passes_filters) after
+    # rosetta_available, so it is no longer the last field on the row.
+    with open(os.path.join(job_dir, 'tab2_final_scores.csv')) as fh:
+        table = list(csv.DictReader(fh))
+    assert len(table) == N_DESIGNS
+    assert all(r['rosetta_available'] == 'False' for r in table), \
+        "degradation must be marked in-band"
 
     status, stage, message = _finish(job_id, job_dir, cat.returncode, merge.returncode)
     assert status == 'partial'

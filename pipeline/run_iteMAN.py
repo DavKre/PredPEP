@@ -10,6 +10,54 @@ import glob
 import uuid
 import shutil
 
+# ---------------------------------------------------------------- tuning
+# These were hardcoded here AND in scheduler.py, with a comment in each
+# telling the next person to keep them in step by hand. They are now read
+# from the environment so the systemd unit is the single place they are set,
+# and the Jobs table's "N / MAX" denominator cannot drift from what the
+# manager actually does.
+#
+#   PREDPEP_MAX_ITERATIONS   how many rounds a job may run (default 6)
+#   PREDPEP_PLATEAU_ROUNDS   consecutive non-improving rounds that stop a job
+#   PREDPEP_CONVERGENCE_MIN  the smallest score gain that counts as progress
+#
+# PREDPEP_CONVERGENCE_MIN IS NOT YET CALIBRATED. The default below is the
+# value this file has always carried. It is almost certainly too small: a
+# threshold under the run-to-run noise of the metric means noise reads as
+# progress, the plateau counter never fills, and every job runs to the cap.
+# Set it from the observed round-to-round deltas of a job that started from
+# an UNOPTIMISED peptide -- see lineage.json, "rounds[].best_score_this_round".
+
+def _env_int(name, default):
+    try:
+        return max(1, int(os.environ.get(name, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_float(name, default):
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+MAX_ITERATIONS = _env_int('PREDPEP_MAX_ITERATIONS', 6)
+# The non-canonical design pass. See the block in PHASE 3 for why it is a
+# separate pass at the end rather than a flag on pepspec.
+NCAA_TOP = _env_int('PREDPEP_NCAA_TOP', 10)
+NCAA_TIMEOUT = _env_int('PREDPEP_NCAA_TIMEOUT', 3600)
+# Empty means "whatever run_ncaaDesign.py defaults to", so this adds a
+# lever without changing behaviour until it is set. Not an int, hence
+# os.environ rather than _env_int.
+NCAA_WEIGHTS = os.environ.get('PREDPEP_NCAA_WEIGHTS', '').strip()
+# On by default. Without the control the only comparison in the table is
+# delta_dG_vs_parent, which includes repacking the whole peptide and so
+# cannot say what the non-canonical itself contributed. Set 0 to skip it.
+NCAA_CONTROL = os.environ.get('PREDPEP_NCAA_CONTROL', '1').strip() != '0'
+PLATEAU_ROUNDS = _env_int('PREDPEP_PLATEAU_ROUNDS', 3)
+CONVERGENCE_MIN = _env_float('PREDPEP_CONVERGENCE_MIN', 0.01)
+
 # Ensure all necessary paths are available for subprocess calls to bash scripts
 os.environ['PATH'] = (
     "/usr/local/rosetta_pkgs/rosetta.binary.ubuntu.release-408/main/tools/protein_tools/scripts:"
@@ -96,6 +144,85 @@ def _stamp_job_json(master_result_dir, status, failed_stage, message):
             json.dump(meta, f)
     except OSError as e:
         print(f"WARNING: could not stamp job.json: {e}", file=sys.stderr)
+
+
+LINEAGE_FILE = 'lineage.json'
+
+
+def _segment_of(pdb_filename):
+    """Decompose a selected model's filename into what actually produced it.
+
+    'SPCGRK1C2W3M4M2145M21_6.pdb' -> residue 'M', anchor 21, model 6
+
+    Read from the IMMEDIATE name only -- the trailing '<letter><anchor>' before
+    the underscore, plus the model number after it. Both are exact here.
+
+    This is NOT recovered by parsing the accumulated lineage string, which is
+    lossy: the trim in copy_and_rename_pdb keeps only the LAST digit of each
+    earlier segment's number run, and that digit is the ITERATION number, not
+    the anchor. So 'M2145' (anchor 21, model 4, iteration 5) becomes 'M5', which
+    then reads as "Met 5" -- a position that was never an anchor. It only looks
+    correct while anchor == iteration, which is why early rounds appeared fine.
+    The naming is left exactly as it was, because downstream scripts and your
+    existing result directories depend on it; the truth is recorded here instead.
+    """
+    base = os.path.splitext(os.path.basename(str(pdb_filename)))[0]
+    pre = base.split('_')[0]
+    model = None
+    if '_' in base:
+        tail = base.split('_')[-1]
+        if tail.isdigit():
+            model = int(tail)
+    m = re.search(r'([A-Za-z])([0-9]+)$', pre)
+    if m:
+        return {'residue': m.group(1), 'anchor_resseq': int(m.group(2)),
+                'model': model}
+    return {'residue': None, 'anchor_resseq': None, 'model': model}
+
+
+def _write_lineage(master_result_dir, job_id, lineage):
+    """The provenance chain, as data rather than encoded in a filename.
+
+    Written after every round, not just at the end, so a job that crashes or is
+    still running has a usable record. Mirrored into job.json so the dashboard
+    can offer "branch from this variant" without reading a second file.
+    """
+    payload = {'job_id': job_id, 'rounds': lineage,
+               'updated_at': time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime())}
+    try:
+        with open(os.path.join(master_result_dir, LINEAGE_FILE), 'w') as f:
+            json.dump(payload, f, indent=2)
+    except OSError as e:
+        print(f"WARNING: could not write {LINEAGE_FILE}: {e}", file=sys.stderr)
+
+    path = os.path.join(master_result_dir, 'job.json')
+    try:
+        with open(path) as f:
+            meta = json.load(f)
+    except (OSError, ValueError):
+        return                      # job.json is the scheduler's; never create it here
+    meta['lineage'] = lineage
+    try:
+        with open(path, 'w') as f:
+            json.dump(meta, f)
+    except OSError as e:
+        print(f"WARNING: could not record lineage in job.json: {e}", file=sys.stderr)
+
+
+def _lineage_label(lineage):
+    """Human-readable chain built FROM the record, e.g. 'C2#6 -> W3#8 -> M21#4'."""
+    parts = []
+    for r in lineage:
+        # 'selected' is a LIST (a round branches into up to 3); the first entry
+        # is the best-scoring pick, which is the main line of descent.
+        picks = r.get('selected') or []
+        sel = picks[0] if picks else {}
+        if sel.get('residue') and sel.get('anchor_resseq') is not None:
+            tag = f"{sel['residue']}{sel['anchor_resseq']}"
+            if sel.get('model') is not None:
+                tag += f"#{sel['model']}"
+            parts.append(tag)
+    return ' -> '.join(parts)
 
 
 def run_bash_script(script_path, *args, log_file=None):
@@ -355,9 +482,7 @@ def iterative_pipeline_manager(input_pdb_path, master_result_dir, cpus, job_id, 
     
     print(f"--- Iterative Pipeline Manager Started: {job_id} ---")
     
-    global_best_score = 999.0 
-    CONVERGENCE_THRESHOLD = 0.01 
-    
+    global_best_score = 999.0
     consecutive_no_improvement = 0 
     previously_selected_pdbs = set() 
     
@@ -419,12 +544,31 @@ def iterative_pipeline_manager(input_pdb_path, master_result_dir, cpus, job_id, 
     # 5. Initialize tracking variables for the loop
     global_best_score = iteration_best_score
     current_inputs = selected
+
+    # Iteration 1's picks must be marked used BEFORE iteration 2 selects, or they
+    # remain candidates and -- being the current global best -- get chosen again,
+    # so iteration 3 re-runs templates iteration 2 already ran. Every later round
+    # does this correctly at step 3 of the loop; only round 1 was missing it.
+    for pdb_data in selected:
+        previously_selected_pdbs.add(pdb_data['pdb_filename'])
+
+    lineage = [{
+        'round': 1,
+        'parent': None,
+        'template_pdb_base': pdb_base,
+        'iteration_dir': run_job_id,
+        'best_score_this_round': (None if iteration_best_score >= 999.0
+                                  else iteration_best_score),
+        'selected': [dict(_segment_of(d['pdb_filename']),
+                          pdb=d['pdb_filename'], foldx=d['score'])
+                     for d in selected],
+    }]
+    # 'selected' at a round is the list the NEXT round branches from, best first.
+    _write_lineage(master_result_dir, job_id, lineage)
     
     # ------------------------------------------------------------------
     # --- PHASE 2: ITERATIVE LOOP (STARTS FROM ITERATION 2) ---
     # ------------------------------------------------------------------
-    
-    MAX_ITERATIONS = 6 
     
     try:
         # Loop starts from iteration 2 up to MAX_ITERATIONS
@@ -436,6 +580,7 @@ def iterative_pipeline_manager(input_pdb_path, master_result_dir, cpus, job_id, 
                 break
                 
             # 1. RUN WORKERS
+            round_runs = []
             for input_data in current_inputs:
                 
                 source_pdb_path = input_data['original_path'] 
@@ -476,27 +621,82 @@ def iterative_pipeline_manager(input_pdb_path, master_result_dir, cpus, job_id, 
                 )
 
                 print(f"  -> Run completed for {input_data['pdb_filename']}.")
-            
+
+                # Which parent produced this run, and the name it was given.
+                # Recorded per run because a round branches into up to 3.
+                round_runs.append({
+                    'parent_pdb': input_data['pdb_filename'],
+                    'parent': dict(_segment_of(input_data['pdb_filename']),
+                                   foldx=input_data.get('score')),
+                    'template_pdb_base': pdb_base,
+                    'iteration_dir': run_job_id,
+                })
+
             # 2. Aggregate results and select the next inputs
             selected, iteration_best_score = parse_and_select_best(
                 master_id, master_result_dir, iteration, manager_log, previously_selected_pdbs
             )
+
+            lineage.append({
+                'round': iteration,
+                'runs': round_runs,
+                'best_score_this_round': (None if iteration_best_score >= 999.0
+                                          else iteration_best_score),
+                'selected': [dict(_segment_of(d['pdb_filename']),
+                                  pdb=d['pdb_filename'], foldx=d['score'])
+                             for d in selected],
+            })
+            _write_lineage(master_result_dir, job_id, lineage)
+            label = _lineage_label(lineage)
+            if label:
+                print(f"  -> Lineage so far: {label}")
             
             # --- CONVERGENCE CHECK AND TRACKING ---
+            #
+            # Lower is better, so a positive `improvement` means this round
+            # beat the running best.
+            #
+            # THE BUG THIS REPLACES: the old test was
+            #
+            #     if iteration_best_score < global_best_score:   -> reset
+            #     elif improvement < CONVERGENCE_THRESHOLD:      -> count
+            #
+            # The first branch caught ANY improvement, however small, so a
+            # gain of 0.0001 reset the counter. The elif was therefore only
+            # reachable when improvement <= 0, where `improvement < 0.01` is
+            # always true -- so the threshold was never once consulted, and
+            # the rule was really "three rounds with NO improvement at all"
+            # rather than the intended "no SIGNIFICANT improvement". A job
+            # creeping along in noise would run to the cap.
+            #
+            # Each round is judged against the running best, so three small
+            # steps in a row count as a plateau even though they sum to
+            # something. That is the intended reading of "no significant
+            # improvement three rounds running"; if you ever want cumulative
+            # gain to break a plateau instead, compare against the best as it
+            # stood when the counter last reset, not against the running best.
             improvement = global_best_score - iteration_best_score
-            
-            if iteration_best_score < global_best_score:
+
+            if improvement >= CONVERGENCE_MIN:
                 global_best_score = iteration_best_score
-                consecutive_no_improvement = 0 
-                print(f"Global Best Score improved to: {global_best_score:.2f}")
-            elif improvement < CONVERGENCE_THRESHOLD:
+                consecutive_no_improvement = 0
+                print(f"Global Best Score improved to: {global_best_score:.2f} "
+                      f"(gain {improvement:.3f} >= {CONVERGENCE_MIN:.3f})")
+            else:
+                # Not progress, but still track the best score actually seen,
+                # or the number this job reports would be stale.
+                if improvement > 0:
+                    global_best_score = iteration_best_score
                 consecutive_no_improvement += 1
-                print(f"Score did not significantly improve (< {CONVERGENCE_THRESHOLD:.2f}). Consecutive non-improvement count: {consecutive_no_improvement}/3")
-            
-            # --- CUSTOM EXIT CONDITION: 3 consecutive rounds without improvement ---
-            if consecutive_no_improvement >= 3:
+                print(f"No significant improvement (gain {improvement:+.3f} < "
+                      f"{CONVERGENCE_MIN:.3f}). Plateau count: "
+                      f"{consecutive_no_improvement}/{PLATEAU_ROUNDS}")
+
+            # --- EXIT CONDITION: PLATEAU_ROUNDS consecutive non-improving rounds ---
+            if consecutive_no_improvement >= PLATEAU_ROUNDS:
                 print(f"\n*** CONVERGENCE REACHED ***")
-                print(f"No significant score improvement for {consecutive_no_improvement} consecutive iterations. Stopping.")
+                print(f"No significant score improvement for {consecutive_no_improvement} "
+                      f"consecutive iterations (threshold {CONVERGENCE_MIN:.3f}). Stopping.")
                 break 
             
             # 3. Prepare for the next iteration
@@ -540,6 +740,112 @@ def iterative_pipeline_manager(input_pdb_path, master_result_dir, cpus, job_id, 
             failed_stage = failed_stage or 'score_merge'
             stage_errors.append(f"run_mergeScores.py failed: {e}")
             print(f"FATAL ERROR running run_mergeScores.py: {e}", file=sys.stderr)
+
+        # 2b. NON-CANONICAL DESIGN PASS (run_ncaaDesign.py)
+        #
+        # This is where selected non-canonical and D residues actually take
+        # effect. pepspec cannot place them: its design loop hardcodes
+        # chemical::AA(1..20) (pepspec.cc:1293), and the packer-palette flag
+        # crashes it. So the pass runs here, on finished models, through
+        # rosetta_scripts -- and here rather than inside the loop, because
+        # run_iteMAN feeds each round's best models back into pepspec and a
+        # model carrying an NCAA would hit that crash on the next round.
+        #
+        # A failure in this pass must NOT change the job's verdict. The
+        # canonical designs and their scores are already complete and valid,
+        # and this pass writes its own table without touching what the
+        # aggregation above produced. Hence an error list of its own that never
+        # reaches failed_stage or stage_errors.
+        ncaa_errors = []
+        # Resolved rather than assumed: the other stages live in /usr/local/bin
+        # but run_ncaaDesign.py is installed in /usr/local/pepspec_pipe, so a
+        # single hardcoded path silently never runs.
+        ncaa_script = next(
+            (c for c in ('/usr/local/bin/run_ncaaDesign.py',
+                         '/usr/local/pepspec_pipe/run_ncaaDesign.py')
+             if os.path.exists(c)), None)
+        ncaa_codes = []
+        try:
+            with open(os.path.join(master_result_dir, 'design_spec.json')) as f:
+                ncaa_codes = ((json.load(f).get('palette') or {})
+                              .get('noncanonical') or [])
+        except (OSError, ValueError) as e:
+            ncaa_errors.append(f'could not read design_spec.json: {e}')
+
+        ncaa_off = os.environ.get('PREDPEP_NCAA_PASS', '1').strip().lower() \
+            in ('0', 'no', 'false', 'off')
+
+        if not ncaa_codes:
+            print('\n*** No non-canonical residues selected; '
+                  'skipping the design pass. ***')
+        elif ncaa_off:
+            # Said loudly: the user selected residues and is not getting them.
+            print(f'\n*** NCAA design pass DISABLED (PREDPEP_NCAA_PASS); '
+                  f'{len(ncaa_codes)} selected residue(s) were NOT '
+                  f'incorporated. ***', file=sys.stderr)
+            ncaa_errors.append('disabled by PREDPEP_NCAA_PASS')
+        elif not ncaa_script:
+            ncaa_errors.append('run_ncaaDesign.py not found in /usr/local/bin '
+                               'or /usr/local/pepspec_pipe')
+            print(f'WARNING: run_ncaaDesign.py not found; {len(ncaa_codes)} '
+                  f'selected residue(s) were NOT incorporated.',
+                  file=sys.stderr)
+        else:
+            shown = ', '.join(str(c) for c in ncaa_codes[:8])
+            if len(ncaa_codes) > 8:
+                shown += f', ... (+{len(ncaa_codes) - 8} more)'
+            print(f'\n*** Running NCAA design pass on {len(ncaa_codes)} '
+                  f'residue(s) [{shown}], top {NCAA_TOP} models ***')
+            try:
+                ncaa_cmd = [ncaa_script, master_result_dir,
+                            '--top', str(NCAA_TOP)]
+                # The score function is a lever, not a constant: a
+                # non-canonical's reference energy comes from the
+                # `unfolded` term, which only some weights files
+                # enable. Logged on every run, because a ddG means
+                # nothing without knowing which function produced it --
+                # the same reason run_foldX2.sh logs its binary.
+                if NCAA_WEIGHTS:
+                    ncaa_cmd += ['--weights', NCAA_WEIGHTS]
+                # The control is the only comparison that isolates what
+                # the non-canonical contributed: same backbone, same
+                # protocol, same nloop, palette withheld. Measured
+                # 17 Nov 2026 at 73s a structure, it roughly doubles the
+                # pass -- about 25 min at top 10, well inside the
+                # budget -- which is why it is on rather than optional.
+                if NCAA_CONTROL:
+                    ncaa_cmd.append('--canonical-control')
+                print('NCAA weights: %s, control: %s'
+                      % (NCAA_WEIGHTS or '(script default)',
+                         'on' if NCAA_CONTROL else 'off'),
+                      file=sys.stderr)
+                subprocess.run(ncaa_cmd,
+                               check=True, timeout=NCAA_TIMEOUT,
+                               stdout=sys.stderr, stderr=sys.stderr)
+                print('*** NCAA design pass complete. ***')
+            except subprocess.TimeoutExpired:
+                ncaa_errors.append(
+                    f'run_ncaaDesign.py exceeded {NCAA_TIMEOUT}s and was '
+                    'abandoned')
+                print(f'WARNING: NCAA design pass exceeded {NCAA_TIMEOUT}s; '
+                      'abandoned. The canonical results are unaffected.',
+                      file=sys.stderr)
+            except subprocess.CalledProcessError as e:
+                ncaa_errors.append(f'run_ncaaDesign.py failed: {e}')
+                print(f'WARNING: NCAA design pass failed: {e}. The canonical '
+                      'results are unaffected.', file=sys.stderr)
+
+        if ncaa_errors:
+            # Recorded beside the job so a consumer can see that the selection
+            # did not take effect, without reading the manager log.
+            try:
+                with open(os.path.join(master_result_dir,
+                                       'ncaa_status.json'), 'w') as f:
+                    json.dump({'requested': list(ncaa_codes),
+                               'incorporated': False,
+                               'errors': ncaa_errors}, f, indent=2)
+            except OSError:
+                pass
 
         # 3. Verdict, based on the deliverable itself rather than on exit codes alone —
         # the aggregation has silent-success paths that exit 0 without producing it.

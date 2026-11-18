@@ -35,15 +35,29 @@ fi
 # Prepare the persistent data dir and make it writable by the container's app user (uid 1003).
 mkdir -p "$DATA"
 docker run --rm --user 0 -v "$DATA":/d "$IMAGE" \
-  sh -c "mkdir -p /d/results /d/uploads && chown -R $APP_UID:$APP_UID /d"
+  sh -c "mkdir -p /d/results /d/uploads /d/archive /d/state && chown -R $APP_UID:$APP_UID /d"
+
+# Refuse to recreate the container while a job is running: `docker rm -f` SIGKILLs
+# the pipeline with no grace period, and an orphaned job is reconciled to failed on
+# the next boot, never resumed. Set FORCE=1 to override deliberately.
+if [ "${FORCE:-0}" != "1" ] && docker container inspect predpep_app >/dev/null 2>&1; then
+  busy="$(curl -fsS --max-time 5 http://localhost:6363/jobs 2>/dev/null \
+          | grep -o '"status": *"\(Running\|Queued\)"' | wc -l)"
+  if [ "${busy:-0}" -gt 0 ]; then
+    echo "error: $busy job(s) Running/Queued on this node — recreating would kill them." >&2
+    echo "  wait for them to finish, or re-run with FORCE=1 to proceed anyway." >&2
+    exit 1
+  fi
+fi
 
 # (Re)create the container. This removes only the CONTAINER — $DATA is never touched.
+# Host 6363 (the port the DDN dispatcher dials) -> container 8383 (upstream's bind).
 docker rm -f predpep_app >/dev/null 2>&1 || true
 docker run -d --name predpep_app \
-  -v "$DATA":/tmp/pepspec \
+  -v "$DATA":/data \
   --log-opt max-size=10m --log-opt max-file=3 \
-  --pids-limit 4096 \
-  -p 6363:6363 \
+  --pids-limit 4096 --stop-timeout 120 \
+  -p 6363:8383 \
   --restart unless-stopped \
   "$IMAGE"
 

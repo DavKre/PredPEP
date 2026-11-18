@@ -36,11 +36,11 @@ done
 docker run -d \
   --name "${CONTAINER}" \
   "${ENV_ARGS[@]}" \
-  -v predpep_data:/tmp/pepspec \
+  -v predpep_data:/data \
   --log-opt max-size=10m --log-opt max-file=3 \
-  --pids-limit 4096 \
-  -p "${HOST_PORT}:6363" \
-  -v "${ROOT}/app:/opt/sp-predPEP" \
+  --pids-limit 4096 --stop-timeout 120 \
+  -p "${HOST_PORT}:8383" \
+  -v "${ROOT}/app:/opt/spacepep-predPEP" \
   -v "${ROOT}/pipeline:/usr/local/pepspec_pipe" \
   "${IMAGE}"
 

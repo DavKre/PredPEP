@@ -4,31 +4,59 @@
 # `docker system prune --volumes`. The init service makes that dir writable by the
 # image's app user (uid 1003) on first `up` (needs Docker Compose v2).
 # For code-iteration bind-mounts of the source tree, use run-dev.sh instead.
+#
+# PORTS: the container binds 8383 (upstream's default, so logs and docs read the
+# same on a node as on the group server); the host port stays 6363, which is
+# what the DDN dispatcher already dials. Do not change the host side without
+# updating the dispatcher.
+#
+# DATA: /data inside the container, holding results/ uploads/ archive/ state/.
+# v1.4.0 used /tmp/pepspec — see MIGRATING in README.md before upgrading a node
+# whose bind-mount still has the old layout.
 
 services:
   # one-shot: prepare + chown the bind-mounted data dir for the app user (uid 1003)
   predpep-init:
-    image: predpep:v1.4.0
+    image: predpep:v1.6.0
     user: "0"
     volumes:
-      - "${PREDPEP_DATA:-./predpep_data}:/tmp/pepspec"
-    entrypoint: ["sh", "-c", "mkdir -p /tmp/pepspec/results /tmp/pepspec/uploads && chown -R 1003:1003 /tmp/pepspec"]
+      - "${PREDPEP_DATA:-./predpep_data}:/data"
+    entrypoint: ["sh", "-c", "mkdir -p /data/results /data/uploads /data/archive /data/state && chown -R 1003:1003 /data"]
     restart: "no"
 
   predpep:
-    image: predpep:v1.4.0          # keep in sync with ./VERSION (scripts/build.sh also tags :latest)
+    image: predpep:v1.6.0          # keep in sync with ./VERSION (scripts/build.sh also tags :latest)
     container_name: predpep_app
     depends_on:
       predpep-init:
         condition: service_completed_successfully
     ports:
-      - "6363:6363"
+      - "6363:8383"
+    environment:
+      # Pass-through form (name only, no value): these reach the container ONLY
+      # when set in the host environment. The `${VAR:-}` form would instead set
+      # them to an empty string and override the image's own defaults — an empty
+      # PREDPEP_RETENTION_BYTES is not "unset", it is a parse error at sweep time.
+      #
+      # Everything else is baked into the image, including PREDPEP_NCAA_WEIGHTS,
+      # which changes results and so must not depend on a run line remembering it.
+      #
+      # PREDPEP_PARTIAL_STATUS stays unset (image default 0) until the DDN client
+      # treats "Partial" as terminal: it maps unknown statuses to running and
+      # polls without a timeout, so emitting it early polls a finished job forever.
+      - PREDPEP_CORE_BUDGET
+      - PREDPEP_RETENTION_BYTES
+      - PREDPEP_RETENTION_DAYS
+      - PREDPEP_PARTIAL_STATUS
     volumes:
       # HOST bind-mount (not a named volume): survives `docker compose down -v`,
       # `docker volume prune`, etc. Override the host path with PREDPEP_DATA.
       # To share data with scripts/deploy.sh, point PREDPEP_DATA at the same dir.
-      - "${PREDPEP_DATA:-./predpep_data}:/tmp/pepspec"
+      - "${PREDPEP_DATA:-./predpep_data}:/data"
     restart: unless-stopped
+    # Let the scheduler finalise a running job on `compose down` instead of
+    # having pepspec children killed mid-wave. Matches the group server.
+    stop_grace_period: 2m
     pids_limit: 4096
     logging:
       driver: json-file

@@ -3,15 +3,20 @@
 **Audience:** anyone building a central **controller / orchestrator** (a dispatcher that deploys,
 monitors, and assigns jobs to one or more predPEP compute nodes across machines — including a node
 on the controller's own host).
-**Node status:** fleet-deployable for **trusted/private networks**. There is **no authentication
-yet** (a deferred security phase) — see §8.
+**Node status:** fleet-deployable. As of **v1.6.0** the node has bearer-token auth, enforced from
+the moment the first token exists — see §8.
+
+> **v1.6.0 readers start here:** [UPGRADE-v1.6.0-node.md](UPGRADE-v1.6.0-node.md) carries the delta
+> from v1.4.0, including the one change a dispatcher **must** make (`POST /upload` can return
+> several job ids) and the `/data` migration. The dev's own notes are in
+> [upstream-v1.6.0/](upstream-v1.6.0/). This guide describes the steady state.
 
 ---
 
 ## 1. Model in one paragraph
 
-A **predPEP node** is a single self-contained Docker image (`predpep:v1.4.0`, ~4.8 GB, CPU-only,
-`ubuntu:22.04` base) that runs a Flask/gunicorn service on **port 6363**. It accepts a
+A **predPEP node** is a single self-contained Docker image (`predpep:v1.6.0`, CPU-only,
+`ubuntu:22.04` base) that runs a Flask/gunicorn service on **host port 6363** (container 8383). It accepts a
 peptide-design job (a PDB complex + parameters), runs a Rosetta + FoldX pipeline, and produces a
 result `.zip`. Each node is **autonomous**: it has its own CPU-aware queue, disk retention, and a
 browser UI. A controller's job is to (a) deploy/maintain the image on machines, (b) watch each
@@ -36,10 +41,10 @@ resumable-via-file variant.
 ```bash
 docker run -d --name predpep_app \
   -e PREDPEP_CORE_BUDGET=32 \                  # optional; default = machine cores
-  -v predpep_data:/tmp/pepspec \               # persistent job storage (named volume) — REQUIRED
+  -v predpep_data:/data \                      # persistent job storage — REQUIRED
   --log-opt max-size=10m --log-opt max-file=3 \
-  --pids-limit 4096 \
-  -p 6363:6363 \
+  --pids-limit 4096 --stop-timeout 120 \
+  -p 6363:8383 \
   --restart unless-stopped \
   predpep:v1.3.0
 ```
@@ -68,19 +73,23 @@ On restart the node **reconciles** its state from the volume (see §4).
 ## 3. Control API (port 6363)
 
 All responses are JSON unless noted. `job_id` format: `SP<3-letter protein><1-letter user>_<8 hex>`
-e.g. `SPEGFT_99b60e04`. No auth headers (yet).
+e.g. `SPEGFT_99b60e04`. Nothing in a job id says which host holds it — nodes share no state, so the
+dispatcher must keep the job-to-host mapping; asking the wrong node returns "not found".
+
+**Auth:** send `Authorization: Bearer <token>` on every route except `/health`. On a node with zero
+tokens every route is open, which is how the first token is minted; after that it is required. See §8.
 
 ### Liveness / capacity (poll these)
 | Method | Path | Returns |
 |---|---|---|
-| `GET` | `/health` | `{"service":"predpep-node","status":"ok","version":"v1.4.0"}` — JSON liveness probe (use this, not `/`) |
+| `GET` | `/health` | `{"service":"predpep-node","status":"ok","version":"v1.6.0"}` — JSON liveness probe (use this, not `/`); **unauthenticated by design**, and the version is what lets a dispatcher refuse to mix results across a staged rollout |
 | `GET` | `/` | the browser **UI** (HTML) — not for the controller; for liveness use `/health` |
 | `GET` | `/state` | capacity + disk — **the dispatch signal** (below) |
 
 `GET /state` →
 ```json
 {
-  "version": "v1.4.0",       // node image version (baked from the VERSION file at build) — for update checks
+  "version": "v1.6.0",       // node image version (baked from the VERSION file at build) — for update checks
   "core_budget": 32,         // max cores this node will commit
   "reserved_cores": 8,       // cores held by running jobs right now
   "available_cores": 24,     // core_budget - reserved
@@ -93,6 +102,18 @@ e.g. `SPEGFT_99b60e04`. No auth headers (yet).
 Browser-UI-submitted jobs also reserve cores and show up here, so `/state` is the **true** load —
 the controller is not the only source of jobs.
 
+Three things about dispatch that are easy to assume wrongly:
+
+- **`accepting` is hardcoded `true`.** It never flips under load. Dispatch on `available_cores`.
+- **`/upload` never refuses for lack of capacity — it queues.** A node with two free cores accepts a
+  sixteen-core job and parks it. A dispatcher that records success without reading `status` builds an
+  invisible backlog on one machine while another sits idle.
+- **Nothing reserves capacity between reading `/state` and posting `/upload`.** Two concurrent
+  dispatches can read the same numbers and pick the same node; the second queues. Serialising
+  dispatch fixes it properly, but reading `status` in the response covers it without coordination.
+- **`core_budget` differs per machine** (`PREDPEP_CORE_BUDGET`, else derived from the host), so judge
+  "has free CPU" against each node's own `core_budget`, never a fleet-wide constant.
+
 ### Submit a job
 `POST /upload` — `multipart/form-data`:
 | field | type | notes |
@@ -102,16 +123,55 @@ the controller is not the only source of jobs.
 | `cpus` | int | cores to reserve; server-clamps to `[2, min(32, core_budget)]` |
 | `file1` | file | the complex PDB; **peptide must be chain B** |
 
+Requested cores are clamped twice: `max(2, min(32, CORE_BUDGET, requested))` on submit, then reduced
+again to the work actually available to parallelise (one pepspec process per anchor). So the reserved
+count **cannot be predicted from the submission** — reconcile against `cores` in the response, or
+re-poll `/state`. `cores_note` is the human-readable reason a 32-core request ran on 6; show it.
+
 Response:
 ```json
 { "success": true, "job_id": "SPEGFT_99b60e04",
   "status": "running",          // or "queued"
   "queue_position": 0,          // jobs ahead of it in the FIFO queue
+  "cores": 6,                   // what was ACTUALLY reserved (v1.6.0)
+  "cores_note": null,           // why, when it differs from the request (v1.6.0)
   "message": "Job SPEGFT_99b60e04 running." }
 ```
 The node reserves `cpus` for the job's **entire lifetime** and starts it only if
 `reserved_cores + cpus ≤ core_budget`; otherwise it sits **queued** (FIFO) and starts automatically
 when cores free up. On bad input: `{"success": false, "error": "..."}`.
+
+#### One submission can return SEVERAL job ids (v1.6.0) — the one mandatory client change
+
+When the uploaded peptide chain is **discontinuous**, v1.6.0 splits the submission into one sub-job
+per segment, each designing its own segment with the others treated as part of the receptor:
+
+```json
+{ "success": true, "split": true, "parent_job": "<parent id>",
+  "jobs": [ {"job_id": "...", "segment": 1, "queue_position": 0, "cores": 6,
+             "cores_note": null, "peptide": "...", "receptor_chains": ["..."],
+             "anchor_positions": [...], "caveat": null, "warning": null},
+            {"job_id": "...", "segment": 2, "...": "..."} ],
+  "job_id": "<jobs[0].job_id>", "status": "queued",
+  "message": "<why it was split>", "failures": null }
+```
+
+The top-level `job_id` exists for backward compatibility, so a v1.4-era client reads a valid id and
+does not crash. **It reads only the first sub-job.** The others run, reserve cores, and are invisible
+to it — which shows up as capacity under-count, premature completion when sub-job 1 finishes while
+sub-job 2 is still running, and partial results (`/results_data/<first id>` returns one segment's
+designs with nothing saying the rest exist). None of it raises an error.
+
+The fix is one branch: **if `split` is true, enumerate `jobs[]` and track every `job_id`.** Also:
+
+- **Do not poll `parent_job`.** Its result directory is deliberately removed, so a parent with no
+  work of its own does not appear in `/jobs` and `/status` on it finds nothing.
+- **Surface `failures[]`.** A split can partly succeed — some segments created, others not — and
+  `failures` is then a list of reasons, not something to swallow.
+
+Why the split exists at all: a discontinuous chain reaching Rosetta turns the break into a
+fabricated ~14 Å "peptide bond", and the run completes with plausible scores for a molecule that
+cannot exist.
 
 ### Track a job
 | Method | Path | Returns |
@@ -179,10 +239,38 @@ a stopped or degraded run never strands the user's results.
 
 Both validate the id (reject `/`, `..`); `404` if unknown.
 
-### UI-only / deprecated (a controller can ignore)
-`GET /results_data/<job_id>` (FoldX/Rosetta CSV+text for the browser viewer),
-`GET /stream_final_pdb/<job_id>/<path>` (PDB streaming for the viewer),
-`GET /get_tmap_tree/<job_id>` (**non-functional** — `tmap`/`mhfp` not in the env; returns empty).
+### Inspect a job in depth (v1.6.0)
+| Method | Path | Returns |
+|---|---|---|
+| `GET` | `/jobs/<job_id>/metrics` | live per-iteration progress from `iteration_metrics.json`, `flags_manifest.json`, `runs_status.json`, `foldx_status.json` |
+| `GET` | `/jobs/<job_id>/spec` | the `design_spec.json` as submitted — what the job actually ran |
+| `GET` | `/jobs/<job_id>/log` | the manager log (where `FoldX binary: <path>` and stage failures appear) |
+| `GET` | `/jobs/<job_id>/analytics` | the server-computed analytics bundle (convergence, agreement, correlation, PCA, sequence map, logo, descriptors, sampling) |
+
+`sampling` is worth reading even if nothing else is: pepspec crashes intermittently, and **a crashed
+run yields fewer models rather than failing the job**, so anchors that sampled less are ranked
+against anchors that got the full budget. Nothing else reports that bias. A job from before the
+pipeline recorded it returns `None` rather than zero — unknown losses and no losses are different
+claims.
+
+### Residues and tokens (v1.6.0)
+| Method | Path | Returns |
+|---|---|---|
+| `GET` | `/api/residues` | the design-residue catalogue the node will accept (397 non-canonical: 189 L, 208 D) |
+| `POST` | `/api/residues/reload` | re-read the catalogue from disk |
+| `GET`/`POST`/`DELETE` | `/api/tokens`, `/api/tokens/<id>` | token admin — see §8 |
+| `GET` | `/api/audit` | recent authenticated actions |
+
+A dispatcher that submits a residue palette should validate it against the **node's own**
+`/api/residues`: the catalogue is baked into the image, so a node on an older image may not offer
+what another accepts.
+
+### UI-oriented (a controller can usually ignore)
+`GET /results_data/<job_id>` (score tables for the results view),
+`GET /stream_final_pdb/<job_id>/<path>` (PDB streaming for the 3D viewer; serves models out of the
+result zip once the post-job sweep has removed the directories),
+`GET /get_tmap_tree/<job_id>` (the similarity tree — **functional again in v1.6.0**: this image
+carries `tmap`/`mhfp`, which the v1.4.0 slim env had dropped).
 
 ---
 
@@ -266,13 +354,30 @@ small future endpoint (e.g. `POST /admin/accepting {false}` flipping `/state.acc
 
 ## 8. Security (must read)
 
-**There is no authentication or authorization.** Any host that can reach `:6363` can submit, list,
-stop, and delete jobs, and download any result. Therefore:
-- Deploy nodes on a **private/trusted network only**; do **not** expose `6363` to the internet.
-- The controller↔node channel must be network-isolated (VPN/overlay/firewall) until the planned
-  **security phase** adds auth (e.g. a shared bearer token or mTLS between controller and nodes).
-- Bind to a private interface if possible (today `run.sh` publishes `0.0.0.0:6363`; restrict via
-  host firewall or change the publish to a private IP).
+v1.6.0 has **bearer-token auth**, with one sharp edge: it is enforced *only once a token exists*.
+
+**A freshly deployed node has zero tokens and every route open to anyone who can reach the port.**
+That is not a bug — it is how the first admin token gets minted without a bootstrap secret — but it
+means minting that token is part of deploying the node, not a later hardening step:
+
+```bash
+curl -fsS -X POST http://NODE:6363/api/tokens \
+     -H 'Content-Type: application/json' \
+     -d '{"name":"ddn-dispatcher","scope":"submit"}'
+```
+
+- The plaintext is returned **exactly once**, at creation, and stored only as a SHA-256 hash. A lost
+  token is replaced, never recovered.
+- Scopes rank `read < submit < admin`. `/state` needs `read`; `/upload` needs `submit`;
+  `/api/tokens` and `/api/audit` need `admin`.
+- `/health` stays unauthenticated by design — a liveness probe must not depend on holding a token.
+  Anything that health-checks `/state` instead will start returning 401 the moment a token exists.
+- The token store lives in `/data/state`, so it survives container recreation. A node redeployed
+  with a **fresh** data directory is unauthenticated again until you mint a token.
+- `GET /api/audit` lists recent authenticated actions (`PREDPEP_AUDIT_KEEP`, default 500).
+
+Network posture still matters: deploy on a private/trusted network, do not expose 6363 to the
+internet, and bind to a private interface where you can (`run.sh` publishes `0.0.0.0:6363`).
 
 ---
 

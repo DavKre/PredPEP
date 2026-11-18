@@ -1,0 +1,5 @@
+built:    2026-11-18T18:30:09Z
+image:    sha256:601deb50fb10f4fe8a37e6aa326d53a32eff088d74cb0c712af2289efb3b5855
+host:     hakg
+changes:  core budget derived from the host (cgroup quota, else cores-4);
+          PREDPEP_NCAA_* baked into the image; core field follows anchors

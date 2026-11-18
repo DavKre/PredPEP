@@ -34,7 +34,8 @@ Your job data lives in `~/predpep_data` (override with `PREDPEP_DATA=...`) — a
 ## Prerequisites
 
 - Docker 23+ (the Dockerfile uses `RUN --mount=type=bind`, which requires BuildKit — default in 23+)
-- Building needs ~50 GB free transiently (Rosetta is extracted in full, then pruned in the same layer); the **resulting image is ~4.8 GB**, so machines that only *run* a pre-built image need ~7 GB. Final size is printed at the end of `./scripts/build.sh`.
+- The image is built on **ubuntu:24.04**, matching the dev's v1.6.0 base. Not cosmetic: `libOGDF` (which `tmap` links against) needs GLIBC 2.38, and on 22.04 `import tmap` fails — silently, because predPEP.py catches it and disables the similarity tree.
+- Building needs ~50 GB free transiently (Rosetta is extracted in full, then pruned in the same layer); the **resulting image is 5.53 GB** (v1.4.0 was 4.82 GB — the extra is `rosetta_scripts` for the non-canonical pass, the 305 MB residue library, FoldX Pro and the full analytics stack), so machines that only *run* a pre-built image need ~8 GB. Final size is printed at the end of `./scripts/build.sh`.
 - Port 6363 free on the host
 
 CPU-only — no GPU, NVIDIA driver, or nvidia-container-toolkit required. Runs on any x86-64 Linux host with Docker.
@@ -45,7 +46,9 @@ CPU-only — no GPU, NVIDIA driver, or nvidia-container-toolkit required. Runs o
 ./scripts/build.sh
 ```
 
-Takes ~5–10 min on a fresh build (Rosetta tar extraction is the bottleneck). Full log captured to `build.log`. Subsequent rebuilds reuse the cached blob layer and finish in seconds unless that layer is invalidated.
+Takes ~5–10 min on a fresh build (the Rosetta tar extraction alone is ~4 min and is the bottleneck). Full log captured to `build-v160.log`.
+
+The build verifies itself rather than trusting the blobs: the Rosetta/FoldX/residue files the pipeline needs must exist, every live dependency must import, every pipeline shebang must name an interpreter the image has, and the residue catalogue read inside the image must match the build host's counts (`noncanonical 397`, `retired 6`, `d_offerable 208`, `foldx_scorable 2`). That last check is the dev's `verify.sh` folded into the build, so a wrong image cannot be produced in the first place. Subsequent rebuilds reuse the cached blob layer and finish in seconds unless that layer is invalidated.
 
 ## Versioning
 
@@ -98,6 +101,18 @@ Launches `predpep_app_dev` with `app/` (at `/opt/spacepep-predPEP`) and `pipelin
 - HTML/JS in `templates/` and `static/` → picked up on the next request
 
 Uses the same host port 6363, so it can't coexist with `predpep_app` — stop the other one first, or `HOST_PORT=6364 ./scripts/run-dev.sh`. Host-side pipeline scripts must keep their executable bit: the image's `/usr/local/bin` symlinks resolve through the bind-mount to your files.
+
+### Verifying a node
+
+```
+./scripts/verify.sh [container] [host-port]      # defaults: predpep_app 6363
+```
+
+Answers "is this machine like the others?" — catalogue counts, the binaries the
+pipeline shells out to (resolved **as the app user**, which is what actually runs them),
+the FoldX binary's identity (size + hash, so a node quietly scoring on a different FoldX
+build is caught at deploy time instead of from one line in a job log), whether auth is
+enforced, and whether anything is Running before you redeploy. Non-zero exit on any failure.
 
 ### Tests
 
@@ -157,7 +172,7 @@ docker run -d --name predpep_app \
   -p 6363:8383 --restart unless-stopped predpep:v1.6.0
 ```
 
-The `-v predpep_data:/data` volume is **required for jobs to persist** across restarts, and the port mapping is `6363:8383` — the container binds upstream's 8383 while the host keeps the 6363 the dispatcher dials. Targets need only Docker (the SSH user must be able to run it) and ~7 GB free disk — no GPU, no build toolchain, no blobs. A private registry works too (`docker push`/`pull`). For the controller-side integration + control API, see [docs/INTEGRATION.md](docs/INTEGRATION.md).
+The `-v predpep_data:/data` volume is **required for jobs to persist** across restarts, and the port mapping is `6363:8383` — the container binds upstream's 8383 while the host keeps the 6363 the dispatcher dials. Targets need only Docker (the SSH user must be able to run it) and ~8 GB free disk — no GPU, no build toolchain, no blobs. A private registry works too (`docker push`/`pull`). For the controller-side integration + control API, see [docs/INTEGRATION.md](docs/INTEGRATION.md).
 
 ## Known limitations
 

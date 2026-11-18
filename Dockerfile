@@ -19,7 +19,12 @@
 # Layers are ordered least-volatile (top) to most-volatile (bottom) so that
 # editing app code only invalidates the final few layers.
 
-FROM ubuntu:22.04
+# ubuntu:24.04, not 22.04, and that is not a refresh for its own sake: the
+# conda env and libOGDF both come out of the dev's image, which is 24.04, and
+# libOGDF is linked against GLIBC_2.38. On 22.04 (glibc 2.35) `import tmap`
+# fails with a version error -- which predPEP.py catches and turns into a
+# silently disabled similarity tree.
+FROM ubuntu:24.04
 
 # ---- 1. System packages -----------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -166,8 +171,14 @@ ARG VERSION=dev
 ENV PREDPEP_VERSION=${VERSION} \
     HOME=/home/spacepep \
     FLASK_APP=predPEP.py \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PYTHONUNBUFFERED=1 \
+    MPLBACKEND=Agg \
+    PREDPEP_BIND=0.0.0.0:8383 \
     PREDPEP_APP_DIR=/opt/spacepep-predPEP \
-    PREDPEP_MANAGER=/usr/local/bin/run_iteMAN.py \
+    PREDPEP_MANAGER=/usr/local/pepspec_pipe/run_iteMAN.py \
+    ROSETTA_ROOT=/usr/local/rosetta_pkgs/rosetta.binary.ubuntu.release-408 \
     PREDPEP_ROSETTA=/usr/local/rosetta_pkgs/rosetta.binary.ubuntu.release-408/main \
     PREDPEP_RS_BIN=rosetta_scripts.static.linuxgccrelease \
     PREDPEP_FOLDX=/usr/local/foldxpro_20261231/foldxpro20261231 \

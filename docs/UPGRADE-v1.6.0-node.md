@@ -71,7 +71,7 @@ also how the first admin token gets minted unauthenticated:
 
     curl -fsS -X POST http://localhost:6363/api/tokens \
          -H 'Content-Type: application/json' \
-         -d '{"name":"ddn-dispatcher","scope":"submit"}'
+         -d '{"label":"ddn-dispatcher","owner":"ddn","scope":"submit"}'
 
 The plaintext is returned exactly once and stored only as a SHA-256 hash. Scopes
 rank `read < submit < admin`. `/health` stays unauthenticated by design — a

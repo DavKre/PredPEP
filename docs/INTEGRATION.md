@@ -363,7 +363,7 @@ means minting that token is part of deploying the node, not a later hardening st
 ```bash
 curl -fsS -X POST http://NODE:6363/api/tokens \
      -H 'Content-Type: application/json' \
-     -d '{"name":"ddn-dispatcher","scope":"submit"}'
+     -d '{"label":"ddn-dispatcher","owner":"ddn","scope":"submit"}'
 ```
 
 - The plaintext is returned **exactly once**, at creation, and stored only as a SHA-256 hash. A lost

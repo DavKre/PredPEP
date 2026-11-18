@@ -46,6 +46,11 @@ RUN groupadd --gid ${USER_GID} ${USER_NAME} \
 # Bind-mounted (not COPY'd) so the 22 GB of tarballs never enter an image layer.
 # Extraction + prune happen in ONE RUN so the pruned bytes never persist.
 #
+# blobs/ogdf.tar.gz holds libOGDF/libCOIN, which live in /usr/local/lib in the
+# dev's image rather than inside the conda env -- `import tmap` fails without
+# them, and tmap's failure mode is a silent one: predPEP.py catches the
+# ImportError and disables the similarity tree.
+#
 # blobs/miniforge3-v160.tar.gz is the conda environment lifted out of the dev's
 # predpep:v1.6.0 image (python 3.12), NOT our old 3.10 one. That is a
 # correctness decision, not convenience: the v1.6.0 analytics need sklearn,
@@ -66,6 +71,8 @@ RUN --mount=type=bind,source=./blobs,target=/tmp/blobs,readonly \
  && tar -xzf /tmp/blobs/foldxpro.tar.gz        -C /usr/local/ \
  && tar -xzf /tmp/blobs/residues-v160.tar.gz   -C /opt/ \
  && tar -xzf /tmp/blobs/miniforge3-v160.tar.gz -C /home/${USER_NAME}/ \
+ && tar -xzf /tmp/blobs/ogdf.tar.gz            -C /usr/local/lib/ \
+ && ldconfig \
  && MF=/home/${USER_NAME}/miniforge3 \
  && E=$MF/envs/predPEP \
  && find $E -name '*.a' -delete \
@@ -114,6 +121,17 @@ RUN /home/${USER_NAME}/miniforge3/envs/predPEP/bin/python -c \
 # Every pipeline script is linked by bare name, which is how PREDPEP_MANAGER can
 # default to /usr/local/bin/run_iteMAN.py and how run_iteMAN.py finds
 # run_ncaaDesign.py (it tries /usr/local/bin first, then /usr/local/pepspec_pipe).
+# foldx_20270131 is a legacy-name shim for the FoldX Pro binary. The shipped
+# v1.6.0 run_foldX2.sh resolves FoldX through $PREDPEP_FOLDX, but the dev's
+# entrypoint still creates this shim because an earlier revision called it by
+# bare name -- and that failure mode is silent: every FoldX call returns
+# "command not found", every model scores empty, and the job runs to completion
+# ranking designs on nothing. A symlink is cheaper than the risk.
+#
+# NOT kept by the prune: MakeRotLib.static.linuxgccrelease, which only generates
+# rotamer libraries. The libraries are pre-generated and baked into the residue
+# library, and the dev's own preflight calls its absence non-fatal.
+#
 # clean_pdb.py is linked the same way: run_pepSpecPipe.sh calls it bare, and
 # without it every job dies before its first pepspec run.
 SHELL ["/bin/bash", "-c"]
@@ -126,7 +144,8 @@ RUN chmod +x /usr/local/pepspec_pipe/*.sh /usr/local/pepspec_pipe/*.py \
          ln -sf "$f" "$(basename "$f")"; \
        done \
     && ln -sf /usr/local/rosetta_pkgs/rosetta.binary.ubuntu.release-408/main/tools/protein_tools/scripts/clean_pdb.py clean_pdb.py \
-    && ln -sf /usr/local/foldxpro_20261231/foldxpro20261231 foldxpro20261231
+    && ln -sf /usr/local/foldxpro_20261231/foldxpro20261231 foldxpro20261231 \
+    && ln -sf /usr/local/foldxpro_20261231/foldxpro20261231 foldx_20270131
 
 # Every script's shebang must name an interpreter this image actually has. A
 # script copied in by hand later keeps the build host's shebang and fails with a

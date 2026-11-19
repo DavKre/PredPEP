@@ -40,9 +40,29 @@ docker run --rm --user 0 -v "$DATA":/d "$IMAGE" \
 # Refuse to recreate the container while a job is running: `docker rm -f` SIGKILLs
 # the pipeline with no grace period, and an orphaned job is reconciled to failed on
 # the next boot, never resumed. Set FORCE=1 to override deliberately.
+#
+# This check FAILS CLOSED. /jobs is a protected route: once the node has its first
+# token, an unauthenticated request gets 401, and reading that as "no jobs running"
+# is exactly the wrong answer — it would green-light destroying a container with
+# 14 hours of work in it. So anything other than a 200 that we can actually parse
+# stops the deploy and says why. Pass a read-scope token as PREDPEP_TOKEN.
 if [ "${FORCE:-0}" != "1" ] && docker container inspect predpep_app >/dev/null 2>&1; then
-  busy="$(curl -fsS --max-time 5 http://localhost:6363/jobs 2>/dev/null \
-          | grep -o '"status": *"\(Running\|Queued\)"' | wc -l)"
+  AUTH=()
+  [ -n "${PREDPEP_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer ${PREDPEP_TOKEN}")
+  body="$(curl -sS --max-time 10 -w '\n%{http_code}' "${AUTH[@]+"${AUTH[@]}"}" \
+          http://localhost:6363/jobs 2>/dev/null)" || body=""
+  code="$(printf '%s' "$body" | tail -n1)"
+  if [ "$code" != "200" ]; then
+    echo "error: could not read /jobs on this node (HTTP ${code:-no response})." >&2
+    case "$code" in
+      401|403) echo "  the node has auth enabled — export PREDPEP_TOKEN=<a read-scope token> and re-run." >&2 ;;
+      *)       echo "  the node is not answering; check 'docker ps' and 'docker logs predpep_app'." >&2 ;;
+    esac
+    echo "  refusing to recreate the container without knowing whether a job is running." >&2
+    echo "  override with FORCE=1 only if you are certain the node is idle." >&2
+    exit 1
+  fi
+  busy="$(printf '%s' "$body" | grep -o '"status": *"\(Running\|Queued\)"' | wc -l)"
   if [ "${busy:-0}" -gt 0 ]; then
     echo "error: $busy job(s) Running/Queued on this node — recreating would kill them." >&2
     echo "  wait for them to finish, or re-run with FORCE=1 to proceed anyway." >&2

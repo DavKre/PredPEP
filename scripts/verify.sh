@@ -87,12 +87,14 @@ case "$s" in
 esac
 
 echo "work in flight (check before any redeploy -- rm -f kills jobs with no grace period)"
-j=$(curl -fsS --max-time 10 "http://localhost:$PORT/jobs" 2>/dev/null)
+AUTH=()
+[ -n "${PREDPEP_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer ${PREDPEP_TOKEN}")
+j=$(curl -fsS --max-time 10 "${AUTH[@]+"${AUTH[@]}"}" "http://localhost:$PORT/jobs" 2>/dev/null)
 if [ -n "$j" ]; then
   busy=$(printf '%s' "$j" | grep -o '"status": *"\(Running\|Queued\)"' | wc -l)
   [ "$busy" -eq 0 ] && ok "nothing Running or Queued" || note "$busy job(s) Running/Queued -- do not redeploy yet"
 else
-  note "/jobs needs a token on an authenticated node; check it with one before redeploying"
+  note "/jobs did not answer (needs a token once auth is on): export PREDPEP_TOKEN and re-run before redeploying"
 fi
 
 echo

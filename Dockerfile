@@ -166,6 +166,20 @@ RUN for f in /usr/local/pepspec_pipe/*.py /usr/local/pepspec_pipe/*.sh; do \
 # than it saves.
 COPY --chown=${USER_UID}:${USER_GID} app/ /opt/spacepep-predPEP/
 
+# Every symlink in the app tree must resolve. `test -e` follows the link, so a
+# dangling one fails the build instead of shipping. app/catalogue.csv is the
+# reason: upstream points it at all-residues-list.csv, which the residue library
+# does not contain -- harmless in their image because only their test_dres.py
+# reads it, but a broken link inside a shipped image is a trap for whoever opens
+# it next. Ours points at all-residues-list-complete.csv, the file the catalogue
+# itself reads, and this check keeps it that way.
+RUN set -e; bad=0; \
+    for l in $(find /opt/spacepep-predPEP -type l); do \
+      if [ ! -e "$l" ]; then echo "DANGLING SYMLINK: $l -> $(readlink "$l")" >&2; bad=1; fi; \
+    done; \
+    [ "$bad" = 0 ] || { echo "a symlink in the app tree does not resolve." >&2; exit 1; }; \
+    echo "OK: every symlink in the app tree resolves."
+
 # ---- 6. Runtime configuration ----------------------------------------------
 ARG VERSION=dev
 ENV PREDPEP_VERSION=${VERSION} \

@@ -147,7 +147,8 @@ the ids in `jobs[]`, never the parent.
 **Capacity undercount, measured.** The split submission reserved **4** cores on
 an 8-core node while a client reading only `jobs[0]` would believe 2.
 
-**No `design_spec` means no non-canonical design.** `design_spec.json` is only
+**No `design_spec` means no non-canonical design.** (Full hand-off for the
+dispatcher team: [DDN-CLIENT-CHANGES.md](DDN-CLIENT-CHANGES.md).) `design_spec.json` is only
 written when the submission carries a `design_spec` form field. A v1.4-style
 POST (protein_symbol / user_name / cpus / file1) produces no spec, so the NCAA
 pass logs `could not read design_spec.json` into `ncaa_status.json` and skips —
@@ -155,17 +156,27 @@ and the job still completes normally. The headline v1.6.0 feature is therefore
 **opt-in per submission**: until the dispatcher sends a palette, every job it
 submits is canonical-only.
 
-**The pass placed no non-canonical in any test here.** Across a 4-glycine toy
-peptide and the 1YCR MDM2/p53 complex, with 2-residue and 16-residue D palettes,
-under both `talaris2013_split_unfolded.wts` and `pre_talaris_2013_standard.wts`:
-`designs_with_noncanonical: 0` every time. The machinery is demonstrably correct
-— params load, rotamer libraries load, the packer palette parses, the control
-runs, `failures: []` — the packer simply did not select a D residue onto a
-backbone already optimised for canonicals, which is the limitation
-`run_ncaaDesign.py` prints itself. Treat "the pass ran" and "a non-canonical was
-designed" as separate claims, and read `designs_with_noncanonical` for the
-second. The dev measured 4 of 6 designs beating the control on hakg; that was
-not reproduced here, on a different target with a different palette.
+**Non-canonical design works — but only with a broad mixed palette.** The
+difference is total, and it is the palette, not the build:
+
+| palette | designs containing a non-canonical |
+|---|---|
+| broad `all-mixed`, 60 residues (this image) | **3 of 3** |
+| broad `all-mixed` (group server, 19 Nov 01:39, current image) | **10 of 10**, 14-16 residues per design |
+| `d-mixed`, 2 residues (this image) | 0 |
+| `d-mixed`, 16 residues (this image) | 0 |
+| `d-canonical`, 50 designs x2 (group server) | 0 |
+
+D-only palettes placed nothing on either deployment, under either scorefunction.
+The pass fits residues onto a finished L-peptide backbone and a D residue needs
+mirrored geometry it cannot get after the fact; D residues *do* get placed when
+they are a minority option in a large mixed palette (`DAL`, `DHI`, `DTH`, `DBY`
+were all placed that way). So **send a broad mixed palette**, and treat "the pass
+ran" and "a non-canonical was designed" as separate claims —
+`designs_with_noncanonical` answers the second.
+
+The dev's "4 of 6 beat the control" is sound: those deltas run -1.8 to -3.9,
+well clear of the noise floor below.
 
 **`delta_dG_vs_control` has a noise floor of roughly 0.25 kcal/mol.** On three
 designs that contained **no** non-canonical at all, the column still read

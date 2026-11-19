@@ -17,7 +17,7 @@
 services:
   # one-shot: prepare + chown the bind-mounted data dir for the app user (uid 1003)
   predpep-init:
-    image: predpep:v1.6.0
+    image: predpep:v1.6.0-node
     user: "0"
     volumes:
       - "${PREDPEP_DATA:-./predpep_data}:/data"
@@ -25,7 +25,7 @@ services:
     restart: "no"
 
   predpep:
-    image: predpep:v1.6.0          # keep in sync with ./VERSION (scripts/build.sh also tags :latest)
+    image: predpep:v1.6.0-node          # keep in sync with ./VERSION (scripts/build.sh also tags :latest)
     container_name: predpep_app
     depends_on:
       predpep-init:

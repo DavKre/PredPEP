@@ -18,11 +18,11 @@ You only need **Docker** and the pre-built image — no building, no 23 GB of to
 2. **Get the image and launch**, either:
    - **From the company registry** (recommended) — the script pulls it for you, then runs:
      ```
-     ./scripts/deploy.sh forgejo.lan.peptide.space/spacepeptidesdev/predpep:v1.6.0
+     ./scripts/deploy.sh forgejo.lan.peptide.space/spacepeptidesdev/predpep:v1.6.0-node
      ```
    - **or from a tarball** someone shared:
      ```
-     docker load < predpep-v1.6.0.tgz
+     docker load < predpep-v1.6.0-node.tgz
      ./scripts/deploy.sh
      ```
 3. Open **http://localhost:6363/**
@@ -147,20 +147,20 @@ Job data lives in a **host directory** (`./predpep_data` by default), so `docker
 
 ## Distributing the image (deploying machine-by-machine)
 
-The built image is self-contained (~4.8 GB) — to roll it out to other machines without each one rebuilding (or needing the build-time tool blobs), copy the image directly. `predpep:v1.6.0` already includes everything (scheduler, UI, all fixes); no rebuild is needed on the source machine.
+The built image is self-contained (~4.8 GB) — to roll it out to other machines without each one rebuilding (or needing the build-time tool blobs), copy the image directly. `predpep:v1.6.0-node` already includes everything (scheduler, UI, all fixes); no rebuild is needed on the source machine.
 
 **Over SSH, no temp files (simplest):**
 
 ```
-docker save predpep:v1.6.0 | gzip | ssh USER@TARGET 'gunzip | docker load'
+docker save predpep:v1.6.0-node | gzip | ssh USER@TARGET 'gunzip | docker load'
 ```
 
 **Or via a file with resume (better for flaky links):**
 
 ```
-docker save predpep:v1.6.0 | gzip > predpep-v1.6.0.tgz
-rsync -P predpep-v1.6.0.tgz USER@TARGET:        # -P = progress + resume
-ssh USER@TARGET 'docker load < predpep-v1.6.0.tgz && rm predpep-v1.6.0.tgz'
+docker save predpep:v1.6.0-node | gzip > predpep-v1.6.0-node.tgz
+rsync -P predpep-v1.6.0-node.tgz USER@TARGET:        # -P = progress + resume
+ssh USER@TARGET 'docker load < predpep-v1.6.0-node.tgz && rm predpep-v1.6.0-node.tgz'
 ```
 
 Then launch the node on the target (the browser UI is baked in and served at `/`):
@@ -169,14 +169,14 @@ Then launch the node on the target (the browser UI is baked in and served at `/`
 docker run -d --name predpep_app \
   -v predpep_data:/data \
   --log-opt max-size=10m --log-opt max-file=3 --pids-limit 4096 \
-  -p 6363:8383 --restart unless-stopped predpep:v1.6.0
+  -p 6363:8383 --restart unless-stopped predpep:v1.6.0-node
 ```
 
 The `-v predpep_data:/data` volume is **required for jobs to persist** across restarts, and the port mapping is `6363:8383` — the container binds upstream's 8383 while the host keeps the 6363 the dispatcher dials. Targets need only Docker (the SSH user must be able to run it) and ~8 GB free disk — no GPU, no build toolchain, no blobs. A private registry works too (`docker push`/`pull`). For the controller-side integration + control API, see [docs/INTEGRATION.md](docs/INTEGRATION.md).
 
 ## Known limitations
 
-- **The conda environment is the dev's, not ours.** It is lifted out of `predpep:v1.6.0` (python 3.12) rather than rebuilt from the old 3.10 blob, because the v1.6.0 analytics import `sklearn`, `seaborn` and `mhfp`, and the old environment had none of them — the panels would have come up empty on nodes and nowhere else, without an error. `tmap` is present too, so the similarity tree is no longer a dead feature. Only the conda `pkgs/` download cache (984 MB) and build cruft are stripped.
+- **The conda environment is the dev's, not ours.** It is lifted out of `predpep:v1.6.0-node` (python 3.12) rather than rebuilt from the old 3.10 blob, because the v1.6.0 analytics import `sklearn`, `seaborn` and `mhfp`, and the old environment had none of them — the panels would have come up empty on nodes and nowhere else, without an error. `tmap` is present too, so the similarity tree is no longer a dead feature. Only the conda `pkgs/` download cache (984 MB) and build cruft are stripped.
 - **Job data persists in a host bind-mount** at `/data` (`results/`, `uploads/`, `archive/`, `state/`). It survives container recreate/redeploy and every `docker volume prune` variant. v1.4.0 used `/tmp/pepspec` — see [docs/UPGRADE-v1.6.0-node.md](docs/UPGRADE-v1.6.0-node.md) before upgrading a node.
 - **A node must be drained before redeploy.** `docker rm -f` SIGKILLs the pipeline with no grace period, and an orphaned job is reconciled to *failed* on the next boot, never resumed. `scripts/deploy.sh` now refuses while `/jobs` shows `Running`/`Queued` (`FORCE=1` overrides).
 - **FoldX Pro is bundled** at `/usr/local/foldxpro_20261231/` (binary + `rotabase.txt` + `molecules/`; the 13 GB of unrelated databases that sit beside it on the group server are not included). Licensed — do **not** publicly redistribute this image. Scores are **not comparable** with v1.4.0's FoldX 5 output.

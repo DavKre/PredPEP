@@ -129,6 +129,58 @@ request ran on 6). Show `cores_note` to whoever submitted.
 Everything else in the HTTP surface is unchanged — same 21 routes, and
 `/status/<job_id>` returns the same keys it always did.
 
+### Measured on this fork, 19 November 2026
+
+Three real jobs were run on the merged image (and one on the v1.4.0 prod node for
+comparison). What they showed, beyond what the dev's notes state:
+
+**Polling `parent_job` reports FAILURE, not nothing.** The note says a parent
+"does not appear in the results list" and that polling it "will not find
+anything". In practice `GET /status/<parent>` returns:
+
+    {"message": "Job failed to start.", "status": "Pending/Failed"}
+
+while both sub-jobs run normally. A dispatcher that polls the parent does not
+merely lose track of the work — it reports a healthy submission as failed. Poll
+the ids in `jobs[]`, never the parent.
+
+**Capacity undercount, measured.** The split submission reserved **4** cores on
+an 8-core node while a client reading only `jobs[0]` would believe 2.
+
+**No `design_spec` means no non-canonical design.** `design_spec.json` is only
+written when the submission carries a `design_spec` form field. A v1.4-style
+POST (protein_symbol / user_name / cpus / file1) produces no spec, so the NCAA
+pass logs `could not read design_spec.json` into `ncaa_status.json` and skips —
+and the job still completes normally. The headline v1.6.0 feature is therefore
+**opt-in per submission**: until the dispatcher sends a palette, every job it
+submits is canonical-only.
+
+**The pass placed no non-canonical in any test here.** Across a 4-glycine toy
+peptide and the 1YCR MDM2/p53 complex, with 2-residue and 16-residue D palettes,
+under both `talaris2013_split_unfolded.wts` and `pre_talaris_2013_standard.wts`:
+`designs_with_noncanonical: 0` every time. The machinery is demonstrably correct
+— params load, rotamer libraries load, the packer palette parses, the control
+runs, `failures: []` — the packer simply did not select a D residue onto a
+backbone already optimised for canonicals, which is the limitation
+`run_ncaaDesign.py` prints itself. Treat "the pass ran" and "a non-canonical was
+designed" as separate claims, and read `designs_with_noncanonical` for the
+second. The dev measured 4 of 6 designs beating the control on hakg; that was
+not reproduced here, on a different target with a different palette.
+
+**`delta_dG_vs_control` has a noise floor of roughly 0.25 kcal/mol.** On three
+designs that contained **no** non-canonical at all, the column still read
++0.227, -0.193 and +0.227 — design and control are both canonical-only there, so
+that spread is packer run-to-run variance at `nstruct 1`/`nloop 10`. The column
+is described as what the non-canonical itself contributed; below about
+0.25 kcal/mol it says nothing of the sort.
+
+**Two notes for the dev** (neither affects this merge):
+`/opt/spacepep-predPEP/catalogue.csv` is a dangling symlink to
+`all-residues-list.csv`, which the shipped residue library does not contain —
+identical in their own image, and only `test_dres.py` reads it. And the group
+server's compose health-checks `/state`, which starts returning 401 the moment
+the first token is minted on that node.
+
 ### Still gated off: `Partial`
 
 `PREDPEP_PARTIAL_STATUS` remains **0**. Until the dispatcher treats `Partial` as

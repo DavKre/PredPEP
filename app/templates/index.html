@@ -1,246 +1,778 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>Space Peptides - predPEP Peptide Design</title>
-    <script src="https://cdn.jsdelivr.net/npm/ngl@2.0.0-dev.38/dist/ngl.js"></script> 
-    <script src="https://cdn.plot.ly/plotly-2.30.0.min.js" charset="utf-8"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>predPEP — Space Peptides</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<script>
+/* Theme, applied before first paint so there is no flash of the default.
+   Inline and synchronous on purpose: a deferred module would run after the
+   browser has already painted the dark theme, and a light-theme user would
+   see it flicker on every page load.
 
-    <style>
-        /* BASE LAYOUT */
-        body { font-family: sans-serif; margin: 2rem; background-color: #f4f4f4; }
-        
-        #header-banner {
-            max-width: 1400px;
-            margin: 0 auto 2rem auto;
-            padding: 1.5rem 2rem;
-            background-color: #007bff;
-            color: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        #header-banner h1 { color: white; margin-bottom: 0.2rem; text-align: center; }
-        #header-banner h3 { font-weight: normal; margin-top: 0; text-align: center; }
-        
-        .container { 
-            max-width: 1400px; 
-            margin: auto; 
-            display: flex; 
-            flex-wrap: wrap; 
-            gap: 2rem; 
-        }
-        
-        .content-card {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
-            padding: 2rem; 
-            min-height: 700px; 
-            box-sizing: border-box;
-        }
+   Kept out of the module graph deliberately. app.js imports a chain of
+   modules and a single missing file takes the whole dashboard down with it
+   (that is how the picker once left every tab unresponsive). The theme
+   switcher must not be able to do that. */
+(function () {
+  var T = ['dark', 'light', 'warm', 'scientific'];
+  var saved;
+  try { saved = localStorage.getItem('predpep-theme'); } catch (e) { saved = null; }
+  document.documentElement.setAttribute('data-theme',
+    T.indexOf(saved) > -1 ? saved : 'dark');
 
-        .sidebar { flex: 1 1 350px; }
-        .main-content { flex: 2 1 700px; }
+  window.predpepTheme = function (name) {
+    if (T.indexOf(name) < 0) return;
+    document.documentElement.setAttribute('data-theme', name);
+    try { localStorage.setItem('predpep-theme', name); } catch (e) {}
+    var row = document.getElementById('themePick');
+    if (row) row.querySelectorAll('button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.set === name));
+    });
+    /* Charts read the tokens at draw time, so they pick the new palette up
+       on their next redraw. Tell anything listening to redraw now. */
+    window.dispatchEvent(new CustomEvent('predpep:themechange', { detail: name }));
+  };
 
-        h1 { text-align: left; color: #333; }
-        .form-group { margin-bottom: 1rem; }
-        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
-        
-        input[type="file"], select, button, input[type="text"], input[type="email"] { 
-            width: 100%; 
-            padding: 0.75rem; 
-            border-radius: 4px; 
-            border: 1px solid #ccc; 
-            box-sizing: border-box; 
-        }
-
-        .form-select {
-            background-color: white;
-            cursor: pointer;
-        }
-
-        button { background-color: #007bff; color: white; border: none; cursor: pointer; transition: background-color 0.2s; }
-        button:hover:not(:disabled) { background-color: #0056b3; }
-        button:disabled { background-color: #cccccc; cursor: not-allowed; }
-        
-        #status { margin-top: 1.5rem; text-align: center; padding: 1rem; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9;}
-        #loading { display: none; color: #007bff; font-weight: bold; padding: 0.5rem; }
-        
-        /* TAB STYLES */
-        .tab-buttons { margin-bottom: 0; display: flex; }
-        .tab-buttons button { 
-            flex: 1; 
-            margin: 0 2px; 
-            padding: 10px; 
-            background-color: #e9ecef; 
-            color: #495057; 
-            border: 1px solid #dee2e6; 
-            border-bottom: none; 
-            transition: background-color 0.1s;
-            font-size: 0.85rem;
-        }
-        .tab-buttons button.active { 
-            background-color: white; 
-            color: #007bff; 
-            border-color: #dee2e6; 
-            border-bottom: 1px solid white; 
-            font-weight: bold; 
-        }
-        .tab-content { border: 1px solid #dee2e6; border-top: none; padding: 1rem; min-height: 500px; }
-        .hidden { display: none !important; }
-
-        /* VIEWERS & PLOTS */
-        #pdb-viewer { width: 100%; height: 350px; border: 1px solid #ccc; background-color: #f8f8f8; margin-bottom: 1rem; }
-        #ngl-viewer { width: 100%; height: 500px; border: 1px solid #ccc; background-color: #f8f8f8; position: relative; }
-        
-        .results-table-container { margin-top: 1rem; max-height: 400px; overflow-y: auto; }
-        .results-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9rem; }
-        .results-table th, .results-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        .results-table th { background-color: #f2f2f2; position: sticky; top: 0; }
-        
-        .plot-container { margin-top: 1rem; width: 100%; height: 500px; border: 1px solid #ccc; }
-        .plot-half-width { width: 48%; float: left; margin-right: 2%; } 
-        .clearfix::after { content: ""; clear: both; display: table; }
-        .text-muted { color: #6c757d; font-size: 0.9rem; margin-bottom: 1rem; }
-        .jobs-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-        .jobs-table th, .jobs-table td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
-        .jobs-table th { background: #f3f3f3; }
-        .status-complete { color: #137333; font-weight: bold; }
-        .status-processing { color: #b06000; }
-        .status-queued { color: #555; }
-        .status-stopped { color: #c5221f; font-weight: bold; }
-        /* Partial: results exist and are downloadable, but the final score table is
-           missing or incomplete — neither a green Complete nor a red Failed. */
-        .status-partial { color: #b06000; font-weight: bold; }
-        .iter-reason { display: block; font-size: 0.78em; color: #888; }
-        .job-delete { background: #c5221f; color: #fff; border: none; padding: 3px 8px; cursor: pointer; border-radius: 3px; }
-        .job-stop { background: #b06000; color: #fff; border: none; padding: 3px 8px; cursor: pointer; border-radius: 3px; }
-    </style>
+  document.addEventListener('DOMContentLoaded', function () {
+    var row = document.getElementById('themePick');
+    if (!row) return;
+    row.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-set]');
+      if (b) window.predpepTheme(b.dataset.set);
+    });
+    window.predpepTheme(document.documentElement.getAttribute('data-theme'));
+  });
+})();
+</script>
 </head>
 <body>
 
-<div id="header-banner">
-    <h1>Space Peptides</h1>
-    <h3>predPEP Peptide Design Submission</h3>
-</div>
+<div class="shell">
 
-<div class="container">
-    <div class="sidebar content-card">
-        <form id="uploadForm">
-            <div class="form-group">
-                <label for="file1">Select the Complex PDB File</label>
-                <input type="file" id="file1" name="file1" accept=".pdb" required>
-            </div>
-            <div class="form-group">
-                <label for="protein_symbol">Protein Symbol (e.g., TYK2)</label>
-                <input type="text" id="protein_symbol" name="protein_symbol" placeholder="Enter 4-letter symbol" maxlength="4" required>
-            </div>
-            <div class="form-group">
-                <label for="user_name">User Name</label>
-                <input type="text" id="user_name" name="user_name" placeholder="Your Name" required>
-            </div>
-            <div class="form-group">
-                <label for="user_email">Email Address (Optional)</label>
-                <input type="email" id="user_email" name="user_email" placeholder="email@example.com">
-            </div>
-            <div class="form-group">
-                <label for="cpus">Number of Cores (2–32)</label>
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <input type="range" id="cpus_slider" min="2" max="32" step="1" value="8" style="flex: 1;">
-                    <input type="number" id="cpus" name="cpus" min="2" max="32" step="1" value="8" style="width: 5rem;">
-                </div>
-                <span id="cpus-hint" style="display: block; font-size: 0.85em; margin-top: 0.35rem; color: #666;"></span>
-            </div>
-            <script>
-                (function () {
-                    const slider = document.getElementById('cpus_slider');
-                    const number = document.getElementById('cpus');
-                    const clamp = v => Math.max(2, Math.min(32, v | 0 || 8));
-                    const updateHint = () => { if (window.updateCpusHint) window.updateCpusHint(); };
-                    slider.addEventListener('input', () => { number.value = clamp(slider.value); updateHint(); });
-                    number.addEventListener('input', () => { slider.value = clamp(number.value); updateHint(); });
-                    number.addEventListener('change', () => { number.value = clamp(number.value); slider.value = number.value; updateHint(); });
-                })();
-            </script>
-            <button type="submit">Submit Peptide Design Job</button>
-        </form>
-        
-        <div id="status">
-            <p id="message">Waiting for input...</p>
-            <div id="loading">Processing… you can leave this page — the job keeps running. Track it in the <b>Jobs</b> tab.</div>
-            <div id="downloadLink"></div>
-        </div>
+  <aside class="rail">
+    <div class="rail-brand">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#7FA3FF" stroke-width="1.6" aria-hidden="true">
+        <circle cx="7" cy="14" r="3.2"></circle><circle cx="21" cy="8" r="3.2"></circle>
+        <circle cx="21" cy="20" r="3.2"></circle><path d="M10 13l8-4M10 15l8 4"></path>
+      </svg>
+      <div>
+        <strong>predPEP</strong>
+        <span>Space Peptides</span>
+      </div>
     </div>
-    
-    <div class="main-content content-card">
-        <div class="tab-buttons">
-            <button id="tab1Button" class="active">1. Template</button>
-            <button id="tab2Button" disabled>2. Results Table & Viewer</button>
-            <button id="tab4Button" disabled>3. Score Comparison Plots</button>
-            <button id="tab5Button" disabled>4. Clustering & Heatmaps</button>
-            <button id="tab7Button">5. Jobs</button>
-        </div>
 
-        <div id="tab1-view" class="tab-content">
-            <h2>Template PDB Preview</h2>
-            <div id="pdb-viewer"></div>
-            <div id="pdb-data">Waiting for PDB upload...</div>
-        </div>
-        
-        <div id="tab2-view" class="tab-content hidden">
-            <h2>Predicted Complexes (Master ID: <span id="masterIdDisplay">N/A</span>)</h2>
-            <div id="ngl-viewer" tabindex="0">Click a sequence below to load structure.</div>
-            <div class="results-table-container">
-                <table id="resultsTable" class="results-table">
-                    <thead>
-                        <tr>
-                            <th>Peptide Sequence</th>
-                            <th>PDB Filename</th>
-                            <th>FoldX ΔΔG</th>
-                            <th>Rosetta Total</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
-        
-        <div id="tab4-view" class="tab-content hidden clearfix">
-            <h2>Score Distribution</h2>
-            <div id="score-comparison-scatter" class="plot-container plot-half-width"></div>
-            <div id="foldx-distribution-plot" class="plot-container plot-half-width"></div>
-        </div>
-        
-        <div id="tab5-view" class="tab-content hidden clearfix">
-            <h2>Advanced Analysis</h2>
-            <div id="pca-plot" class="plot-container plot-half-width"></div>
-            <div id="correlation-heatmap" class="plot-container plot-half-width"></div>
-        </div>
+    <nav class="rail-nav" aria-label="Main">
+      <a href="#ops" data-view="ops" aria-current="page">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg>
+        Operations
+      </a>
+      <a href="#submit" data-view="submit">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M12 8v8M8 12h8"></path></svg>
+        New job
+      </a>
+      <a href="#results" data-view="results">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 10h18M9 10v10"></path></svg>
+        Results
+      </a>
+      <a href="#analytics" data-view="analytics">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 20V4M4 20h16"></path><circle cx="9" cy="14" r="1.6"></circle><circle cx="14" cy="9" r="1.6"></circle><circle cx="18" cy="13" r="1.6"></circle></svg>
+        Analytics
+      </a>
+      <a href="#admin" data-view="admin">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"></path></svg>
+        Admin &amp; audit
+      </a>
+    </nav>
 
-        <div id="tab7-view" class="tab-content hidden">
-            <h2>Jobs</h2>
-            <div style="margin:0.5rem 0;">
-                <div id="diskLabel" style="font-size:0.85em;color:#555;">Disk: …</div>
-                <div style="background:#eee;border-radius:4px;height:10px;overflow:hidden;">
-                    <div id="diskBar" style="height:10px;width:0%;background:#137333;transition:width .3s;"></div>
-                </div>
-            </div>
-            <p style="font-size:0.9em;color:#555;">All jobs on this machine — no login, everyone sees all jobs. <b>Delete</b> permanently removes a job's files from disk. (A job left "Processing" after a restart is orphaned — proper run-state tracking comes later.)</p>
-            <table id="jobsTable" class="jobs-table">
-                <thead><tr>
-                    <th>Date</th><th>Protein</th><th>User</th><th>CPUs</th><th>Pep. length</th><th>Status</th><th>Iterations</th><th>Completed</th><th>Download</th><th>Actions</th>
-                </tr></thead>
-                <tbody id="jobsTableBody"><tr><td colspan="10">Loading…</td></tr></tbody>
+    <div class="rail-foot">
+      <div class="row"><span class="dot" id="nodeDot"></span><span id="nodeName">node</span></div>
+      <div class="ver" id="nodeVer">v{{ node_version }}</div>
+
+      <div class="theme-pick">
+        <span class="theme-pick__label" id="themePickLabel">Theme</span>
+        <div class="theme-pick__row" id="themePick" role="group"
+             aria-labelledby="themePickLabel">
+          <button type="button" data-set="dark"       aria-pressed="true"  title="Dark">
+            <span class="sr-only">Dark</span></button>
+          <button type="button" data-set="light"      aria-pressed="false" title="Light">
+            <span class="sr-only">Light</span></button>
+          <button type="button" data-set="warm"       aria-pressed="false" title="Warm">
+            <span class="sr-only">Warm</span></button>
+          <button type="button" data-set="scientific" aria-pressed="false" title="Scientific">
+            <span class="sr-only">Scientific</span></button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ===================================================== OPERATIONS -->
+    <section id="view-ops" class="view">
+      <header class="view-head">
+        <div class="titles">
+          <h1>Operations</h1>
+          <span class="small muted">Queue, core budget and running pipelines · <span id="opsRefreshed">connecting…</span></span>
+        </div>
+        <div class="actions">
+          <label class="sr-only" for="jobSearch">Search jobs</label>
+          <input id="jobSearch" type="search" placeholder="Search jobs, proteins, sequences" style="width:280px">
+          <button class="btn-primary" data-goto="submit">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+            New job
+          </button>
+        </div>
+      </header>
+
+      <div class="grid grid-stats" id="opsStats" aria-label="Node capacity"></div>
+
+      <div class="split">
+        <section class="card wide" aria-labelledby="jobsH">
+          <div class="card-head">
+            <h2 id="jobsH">Jobs</h2>
+            <div class="chips" id="statusFilter" role="group" aria-label="Filter by status"></div>
+          </div>
+          <div class="table-scroll">
+            <table class="data" id="jobsTable">
+              <thead>
+                <tr>
+                  <th scope="col">Job</th>
+                  <th scope="col">Owner</th>
+                  <th scope="col">Cores · len</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" style="width:160px">Iterations</th>
+                  <th scope="col" class="num">Best ΔΔG</th>
+                  <th scope="col">Elapsed</th>
+                  <th scope="col"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody id="jobsBody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
             </table>
+          </div>
+        </section>
+
+        <div class="side">
+          <div class="card card-pad" id="jobDetail" aria-live="polite">
+            <p class="empty" style="padding:8px 0">Select a job to see its progress.</p>
+          </div>
+
+          <div class="console">
+            <div class="console-head">
+              <span>manager log · live tail</span>
+              <span class="live" id="logLive" hidden><i></i>streaming</span>
+            </div>
+            <pre id="logTail">—</pre>
+          </div>
         </div>
-    </div>
+      </div>
+    </section>
+
+    <!-- ========================================================= SUBMIT -->
+    <section id="view-submit" class="view hidden">
+      <header class="view-head">
+        <div class="titles">
+          <h1>New job</h1>
+          <span class="small muted">Upload a target–peptide complex; chain B is the peptide to design.</span>
+        </div>
+      </header>
+
+      <div class="split">
+        <section class="card card-pad wide" aria-labelledby="formH">
+          <h2 id="formH" style="margin-bottom:14px">Submission</h2>
+          <form id="uploadForm" style="display:flex;flex-direction:column;gap:18px">
+
+            <div class="field">
+              <label for="file1">Complex PDB file</label>
+              <input type="file" id="file1" name="file1" accept=".pdb" required>
+              <span class="small muted" id="pdbInfo">No file selected.</span>
+            </div>
+
+            <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+              <div class="field">
+                <label for="protein_symbol">Protein symbol</label>
+                <input type="text" id="protein_symbol" name="protein_symbol" placeholder="e.g. TYK2" maxlength="4" required>
+              </div>
+              <div class="field">
+                <label for="user_name">Your name</label>
+                <input type="text" id="user_name" name="user_name" placeholder="Name" required>
+              </div>
+              <div class="field">
+                <label for="user_email">Email (optional)</label>
+                <input type="email" id="user_email" name="user_email" placeholder="you@example.org">
+              </div>
+            </div>
+
+            <!-- ANCHORS.
+                 This is the only per-position control pepspec actually has.
+                 -pepspec::pep_anchor is a scalar Integer, so each run fixes exactly
+                 ONE residue; a resfile is ignored by this protocol (verified); and the
+                 full pepspec: option group has nothing else per-position. So the strip
+                 selects which anchor RUNS to generate, one flag file each. -->
+            <fieldset style="border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin:0">
+              <legend class="small" style="padding:0 6px;color:var(--ink-3)">Anchors — one run per selected position</legend>
+              <div class="seq" id="pepStrip" style="margin-bottom:8px"><span class="small muted">Detected after upload.</span></div>
+              <span class="small muted strip-note">Upload a PDB to see the peptide.</span>
+              <div class="chips" style="margin-top:10px">
+                <button type="button" class="chip" id="anchorAll">All positions</button>
+                <button type="button" class="chip" id="anchorNone">None</button>
+                <button type="button" class="chip" id="anchorNonSS">Skip disulfide Cys</button>
+              </div>
+              <p class="small muted" id="anchorSummary" style="margin:10px 0 0">
+                Each anchored position is one pepspec run. Fewer anchors means a
+                proportionally shorter job.
+              </p>
+            </fieldset>
+
+            <div class="field">
+              <label for="cpus">Cores <span id="coreRange" class="muted">(2–32)</span></label>
+              <div style="display:flex;align-items:center;gap:12px">
+                <input type="range" id="cpus_slider" min="2" max="32" step="1" value="8" style="flex:1" aria-label="Cores (slider)">
+                <input type="number" id="cpus" name="cpus" min="2" max="32" step="1" value="8" style="width:5.5rem">
+              </div>
+              <span class="small" id="cpusHint">Upload a PDB to see a recommended core count.</span>
+            </div>
+
+            <!-- DESIGN PARAMETERS. Lab preset = the values run_createflag2_2.sh
+                 hardcoded; the Rosetta default is shown alongside each, since several
+                 differ substantially (n_build_loop 100 vs 1000). -->
+            <details>
+              <summary class="small" style="cursor:pointer;font-weight:500;padding:4px 0">
+                Design parameters <span class="muted" id="paramDeviation"></span>
+              </summary>
+              <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin-top:12px">
+                <div class="field">
+                  <label for="p_n_peptides">Peptides per run <span class="muted">(default 8)</span></label>
+                  <input type="number" id="p_n_peptides" data-param="n_peptides" min="1" max="200" step="1" value="10">
+                </div>
+                <div class="field">
+                  <label for="p_n_build_loop">Build loops <span class="muted">(default 1000)</span></label>
+                  <input type="number" id="p_n_build_loop" data-param="n_build_loop" min="10" max="5000" step="10" value="100">
+                </div>
+                <div class="field">
+                  <label for="p_interface_cutoff">Interface cutoff Å <span class="muted">(default 5)</span></label>
+                  <input type="number" id="p_interface_cutoff" data-param="interface_cutoff" min="1" max="12" step="0.5" value="3.0">
+                </div>
+                <div class="field">
+                  <label for="p_clash_cutoff">Clash cutoff Å <span class="muted">(default 5)</span></label>
+                  <input type="number" id="p_clash_cutoff" data-param="clash_cutoff" min="1" max="12" step="0.5" value="4.0">
+                </div>
+                <div class="field">
+                  <label for="p_diversify_lvl">Diversify level <span class="muted">(default 10)</span></label>
+                  <input type="number" id="p_diversify_lvl" data-param="diversify_lvl" min="1" max="50" step="1" value="10">
+                </div>
+              </div>
+              <div class="chips" style="margin-top:12px" id="paramToggles" role="group" aria-label="Switches">
+                <button type="button" class="chip" data-toggle="diversify_pep_seqs" aria-pressed="true">Diversify sequences</button>
+                <button type="button" class="chip" data-toggle="upweight_interface" aria-pressed="false">Upweight interface</button>
+                <button type="button" class="chip" data-toggle="calc_sasa" aria-pressed="false">Calculate SASA</button>
+                <button type="button" class="chip" data-toggle="no_cen" aria-pressed="false">Skip centroid stage</button>
+                <button type="button" class="chip" data-toggle="save_all_pdbs" aria-pressed="false">Save all PDBs</button>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:12px">
+                <button type="button" class="btn-sm" id="resetPreset">Reset to lab preset</button>
+                <button type="button" class="btn-sm" id="rosettaDefaults">Use Rosetta defaults</button>
+              </div>
+            </details>
+
+            <!-- DESIGN RESIDUES. Like disulfide handling below, this acts
+                 DURING the run rather than on the results, so it sits above the
+                 post-run filters.
+
+                 Ticking a non-canonical residue is enforced end to end: the
+                 code travels in the design spec, predPEP.py re-validates it
+                 against the installed params, and run_createflags.py writes it
+                 to the file named by
+                 -packing:packer_palette:extra_base_type_file.
+
+                 The canonical twenty cannot be narrowed here.
+                 CustomBaseTypePackerPalette is ADDITIVE -- it always calls
+                 set_up_default_base_types() and then adds -- and pepspec
+                 applies no subtractive task operation (and ignores resfiles,
+                 same as the anchor strip above). A checkbox that unticked CYS
+                 would look like it worked and change nothing, so the canonical
+                 section is shown as always-on with the reason stated. -->
+            <details id="residueBlock">
+              <summary class="small" style="cursor:pointer;font-weight:500;padding:4px 0">
+                Design residues <span class="muted">— applied during design</span>
+                <span class="muted" id="residueCount"></span>
+                <span class="sub-note" id="residueSummary" style="display:block;font-weight:400"></span>
+              </summary>
+              <div style="margin-top:12px">
+                <button type="button" class="btn-sm" id="openResiduePicker">Choose residues</button>
+                <span class="small muted" style="margin-left:8px">
+                  Which residues pepspec may place at a designed position.
+                </span>
+              </div>
+            </details>
+
+            <!-- DISULFIDE HANDLING. Unlike the post-run filters below, this one acts
+                 DURING the run: it decides how Rosetta types the bonded cysteines.
+                 The default is "auto", which is what every job before this setting
+                 existed did. See the note in run_createflags.py for why the bond
+                 holds only intermittently under "auto". -->
+            <details id="disulfideBlock">
+              <summary class="small" style="cursor:pointer;font-weight:500;padding:4px 0">
+                Disulfide handling <span class="muted">— applied during design</span>
+                <span class="sub-note" id="disulfideModeSummary" style="display:block;font-weight:400"></span>
+              </summary>
+              <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px"
+                   id="disulfideOptions">
+                <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--ink)">
+                  <input type="radio" name="ssMode" value="auto" checked
+                         style="width:auto;margin-top:3px">
+                  <span>Leave to Rosetta <span class="muted">(default)</span>
+                    <span class="sub-note">No flag is emitted. The bonded cysteines usually
+                      survive because the substitution <em>fails</em> — pepspec logs
+                      <code>make_sequence_change failed: new_aa= ALA</code> — not because
+                      anything protects them. When detection does not type them as bonded,
+                      the substitution succeeds and the bond is lost. This is the
+                      intermittent behaviour seen in earlier runs.</span></span>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--ink)">
+                  <input type="radio" name="ssMode" value="preserve" style="width:auto;margin-top:3px">
+                  <span>Preserve the bond every run
+                    <span class="sub-note">Emits <code>-in:fix_disulf</code> with the pair in
+                      pose numbering, so the typing is explicit rather than detected.
+                      Cross-check the numbers against Rosetta's own
+                      <code>Found disulfide between residues X Y</code> log line — they are
+                      recorded in <code>flags_manifest.json</code>.</span></span>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--ink)">
+                  <input type="radio" name="ssMode" value="allow_design" style="width:auto;margin-top:3px">
+                  <span>Let the packer design those positions
+                    <span class="sub-note">Emits <code>-in:detect_disulf false</code>, so the
+                      cysteines are plain CYS and substitutions at those positions succeed.
+                      <strong>The bond will be lost</strong> in any design that takes them.
+                      Use the post-run filter below to separate the designs that kept it.</span></span>
+                </label>
+              </div>
+            </details>
+
+            <!-- POST-RUN FILTERS. pepspec cannot constrain positions during design, so
+                 these are applied to the results afterwards. The yield estimate makes
+                 the cost visible BEFORE submitting rather than after. -->
+            <details>
+              <summary class="small" style="cursor:pointer;font-weight:500;padding:4px 0">
+                Post-run filters <span class="muted">— applied to results, not during design</span>
+              </summary>
+              <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
+                <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--ink)">
+                  <input type="checkbox" id="f_disulfide" style="width:auto;margin-top:2px">
+                  <span>Keep only designs with the template disulfide intact
+                    <span class="sub-note" id="disulfideFilterNote">No disulfide detected in this template.</span></span>
+                </label>
+                <div class="field">
+                  <span class="small">Require the native residue at these positions</span>
+                  <div class="seq" id="nativeStrip" style="margin-top:4px"><span class="small muted">Upload a PDB first.</span></div>
+                  <span class="small muted" id="yieldEstimate"></span>
+                </div>
+              </div>
+            </details>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="submit" class="btn-primary" id="submitBtn">Submit design job</button>
+              <button type="reset">Reset</button>
+              <button type="button" class="btn-sm" id="showSpec" style="margin-left:auto">View spec</button>
+            </div>
+            <pre id="specPreview" class="mono hidden" style="margin:0;padding:12px;background:var(--surface-sunk);border-radius:var(--radius-sm);font-size:11.5px;overflow-x:auto"></pre>
+          </form>
+        </section>
+
+        <div class="side">
+          <div class="card">
+            <div class="card-head"><h2>Template preview</h2></div>
+            <div class="viewer" id="templateViewer"></div>
+          </div>
+          <div class="card card-pad" id="submitStatus">
+            <p class="small muted" style="margin:0">Waiting for input.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================== RESULTS -->
+    <section id="view-results" class="view hidden">
+      <header class="view-head">
+        <div class="titles">
+          <h1>Results explorer</h1>
+          <span class="small muted" id="resultsSub">No job selected.</span>
+        </div>
+        <div class="actions">
+          <label class="sr-only" for="resultsJob">Job</label>
+          <select id="resultsJob" style="width:260px"><option value="">Select a finished job…</option></select>
+          <button id="exportCsv">Export CSV</button>
+          <button id="downloadZip" class="btn-primary">Download .zip</button>
+        </div>
+      </header>
+
+      <section class="card card-pad" aria-label="Filters" style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end">
+        <div class="field" style="flex:1 1 200px">
+          <label for="seqFilter">Sequence contains</label>
+          <input type="text" id="seqFilter" class="mono" placeholder="e.g. TRP, 004, DPN">
+        </div>
+        <div class="field" style="flex:0 1 140px">
+          <label for="iterFilter">Iteration</label>
+          <select id="iterFilter"><option value="">All</option></select>
+        </div>
+        <div class="field" style="flex:0 1 160px">
+          <label for="ddgFilter">FoldX ΔΔG ≤</label>
+          <input type="number" id="ddgFilter" class="mono" step="0.5" placeholder="any">
+        </div>
+        <div class="field">
+          <span>Composition</span>
+          <div class="chips" id="compFilter" role="group" aria-label="Composition"></div>
+        </div>
+        <span class="small muted" id="resultsCount" style="margin-left:auto;padding-bottom:10px"></span>
+      </section>
+
+      <div class="split">
+        <section class="card wide" aria-labelledby="designsH">
+          <div class="card-head">
+            <h2 id="designsH">Designs</h2>
+            <span class="small muted" id="sortNote"></span>
+          </div>
+          <div class="table-scroll">
+            <table class="data" id="designsTable">
+              <thead><tr id="designsHead"></tr></thead>
+              <tbody id="designsBody"><tr><td colspan="7" class="empty">Select a job above.</td></tr></tbody>
+            </table>
+          </div>
+          <div class="card-foot">
+            <span id="pageInfo"></span>
+            <div style="display:flex;gap:6px">
+              <button class="btn-sm" id="prevPage">Previous</button>
+              <button class="btn-sm" id="nextPage">Next</button>
+            </div>
+          </div>
+        </section>
+
+        <div class="side">
+          <div class="card">
+            <div class="card-head">
+              <h2>Structure</h2>
+              <span class="small mono muted" id="viewerPdb">—</span>
+            </div>
+            <div class="viewer viewer-small" id="resultViewer"></div>
+            <div class="card-pad" style="display:flex;gap:6px;flex-wrap:wrap" id="viewerControls">
+              <button class="btn-sm" data-rep="cartoon" aria-pressed="true">Cartoon</button>
+              <button class="btn-sm" data-rep="surface" aria-pressed="false">Surface</button>
+              <button class="btn-sm" data-rep="contacts" aria-pressed="false">Contacts</button>
+              <button class="btn-sm" id="resetView" style="margin-left:auto">Reset view</button>
+            </div>
+          </div>
+          <div class="card card-pad" id="designDetail">
+            <p class="small muted" style="margin:0">Select a design.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================== ANALYTICS -->
+        <!-- ================================================== ANALYTICS (console)
+
+         Eight figures in equal cards read as a wall: nothing is more important
+         than anything else, and the page answers no question on its own. This
+         is the same eight arranged as an instrument instead — a computed
+         readout across the top, every figure as a thumbnail down the left, one
+         of them large, and an explanation on demand.
+
+         HOW THE FIGURES MOVE. Every figure keeps the id its draw function in
+         analytics.js already targets (chartEvolution, chartAgreement, ...), so
+         not one of those functions changes. What changes is where the figure
+         SITS: the controller moves the whole <figure> node between the rail
+         and the focus slot. That is also why there is no hidden holding pen —
+         Plotly measures its container, and a chart drawn inside display:none
+         comes out zero-pixels wide. Every slot here is visible at all times;
+         the thumbnails are simply small. -->
+
+    <section id="view-analytics" class="view hidden" aria-labelledby="analyticsTitle">
+      <header class="view-head">
+        <div class="titles">
+          <h1 id="analyticsTitle">Analytics</h1>
+          <span class="small muted" id="analyticsSub">No job selected.</span>
+        </div>
+        <div class="actions">
+          <label class="sr-only" for="analyticsJob">Job</label>
+          <select id="analyticsJob" style="width:260px"></select>
+          <label class="sr-only" for="colourBy">Colour designs by</label>
+          <select id="colourBy" style="width:200px"></select>
+        </div>
+      </header>
+
+      <!-- Readout. Filled by analytics.js from the job's own data; a figure
+           that could not be computed shows an em dash rather than a zero. -->
+      <div class="card" id="analyticsStrip" style="display:flex;flex-wrap:wrap;padding:0;overflow:hidden">
+        <p class="empty" style="flex:1 1 100%">Select a job above.</p>
+      </div>
+
+      <div class="split" style="gap:14px;align-items:flex-start">
+
+        <!-- Figure rail. One button per figure; the thumbnail inside each
+             button is the live figure, not a picture of it. -->
+        <div style="flex:0 0 218px;min-width:0">
+          <div class="card card-pad" style="padding:11px">
+            <div class="stat-label" style="margin-bottom:9px">Figures</div>
+            <div id="figRail" role="tablist" aria-label="Figures"></div>
+          </div>
+        </div>
+
+        <!-- The focused figure. -->
+        <div class="wide" id="figFocusWrap" style="flex:999 1 460px;min-width:0;
+             display:flex;flex-direction:column;gap:14px">
+          <section class="card">
+            <div class="card-head">
+              <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                <button id="figExplainToggle" type="button" aria-expanded="false"
+                        aria-controls="figExplain" title="About this figure"
+                        style="width:22px;min-height:22px;padding:0;border-radius:50%;
+                               flex:none;font-family:var(--mono);font-size:11px;
+                               font-weight:700;line-height:1">?<span class="sr-only">
+                  About this figure</span></button>
+                <h2 id="figFocusTitle">Analytics</h2>
+              </div>
+              <div class="chips" id="figFocusActions"></div>
+            </div>
+            <div class="card-pad" style="padding-top:6px">
+              <div class="legend-row" id="colourLegend"></div>
+              <div id="figFocus"></div>
+            </div>
+            <div class="card-foot">
+              <span id="figFocusFoot"></span>
+              <span class="mono" id="figFocusCount"></span>
+            </div>
+          </section>
+
+          <!-- Pinned figure. Position preference annotates whichever figure is
+               focused rather than competing with it: it answers "which residue
+               won each position", which you want in view WHILE reading a score
+               map, not instead of it. In the rail it was one more thing to
+               switch to, and switching away from the map to see it defeats the
+               point. It therefore never enters the rail; console.js moves it
+               straight here. Its own ? opens the same explanation panel. -->
+          <section class="card" id="figPinnedCard" hidden>
+            <div class="card-head">
+              <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                <button id="figPinnedExplain" type="button" aria-expanded="false"
+                        aria-controls="figExplain" title="About this figure"
+                        style="width:22px;min-height:22px;padding:0;border-radius:50%;
+                               flex:none;font-family:var(--mono);font-size:11px;
+                               font-weight:700;line-height:1">?<span class="sr-only">
+                  About this figure</span></button>
+                <h2 id="figPinnedTitle">Position preference</h2>
+              </div>
+              <span class="sub-note" id="figPinnedFoot"></span>
+            </div>
+            <div class="card-pad" style="padding-top:6px">
+              <div id="figPinned"></div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Explanation. Hidden until the ? is pressed; takes width from the
+             focused figure rather than covering it, so both are readable. -->
+        <aside class="card" id="figExplain" hidden
+               style="flex:0 0 312px;align-self:flex-start"
+               aria-labelledby="figExplainTitle">
+          <div class="card-head">
+            <h2 id="figExplainTitle">About this figure</h2>
+            <button class="btn-sm" id="figExplainClose" type="button"
+                    style="min-height:24px;padding:0 8px">Close</button>
+          </div>
+          <div class="card-pad" id="figExplainBody"
+               style="display:flex;flex-direction:column;gap:16px"></div>
+        </aside>
+      </div>
+
+      <!-- Every figure, in rail order. analytics.js draws into the inner
+           chart* ids exactly as before; the controller relocates these nodes.
+           data-name is the rail label, data-fig the key used by the explain
+           table in analytics.js. -->
+      <!-- Deliberately NOT display:none. The controller empties this at init,
+           so it is normally a zero-height leftover. If the controller ever
+           fails to run, the figures then render stacked here — ugly, but
+           visible and working. Hiding it would make the same failure look
+           like eight blank panels, and would additionally stop Plotly sizing
+           anything drawn before the move. -->
+      <div id="figPool" style="display:flex;flex-direction:column;gap:14px">
+
+        <figure data-fig="evolution" data-name="Score evolution" style="margin:0">
+          <div id="chartEvolution" class="chart"></div>
+          <p class="chart-note" id="noteEvolution"></p>
+        </figure>
+
+        <figure data-fig="agreement" data-name="FoldX v Rosetta" style="margin:0">
+          <div id="chartAgreement" class="chart"></div>
+          <p class="chart-note" id="noteAgreement"></p>
+        </figure>
+
+        <figure data-fig="heatmap" data-name="Term correlation" style="margin:0">
+          <span class="sr-only" id="corrLabel"></span>
+          <div id="chartHeatmap" class="chart"></div>
+          <p class="chart-note" id="noteHeatmap"></p>
+        </figure>
+
+        <figure data-fig="pca" data-name="Score space" style="margin:0">
+          <span class="sr-only" id="pcaLabel"></span>
+          <div id="chartPca" class="chart"></div>
+          <p class="chart-note" id="notePca"></p>
+        </figure>
+
+        <figure data-fig="pca3d" data-name="Score space 3D" style="margin:0">
+          <span class="sr-only" id="pca3dLabel"></span>
+          <div id="chartPca3d" class="chart"></div>
+          <p class="chart-note" id="notePca3d"></p>
+        </figure>
+
+        <figure data-fig="seqmap" data-name="Sequence space" style="margin:0">
+          <span class="sr-only" id="seqmapLabel"></span>
+          <div id="chartSeqmap" class="chart"></div>
+          <p class="chart-note" id="noteSeqmap"></p>
+        </figure>
+
+        <figure data-fig="logo" data-name="Position preference" style="margin:0">
+          <div id="chartLogo" class="chart"></div>
+        </figure>
+
+        <figure data-fig="tmap" data-name="Similarity tree" style="margin:0">
+          <div id="chartTmap" class="chart"></div>
+          <p class="chart-note" id="noteTmap"></p>
+        </figure>
+      </div>
+    </section>
+
+<section id="view-admin" class="view hidden">
+      <header class="view-head">
+        <div class="titles">
+          <h1>Admin &amp; audit</h1>
+          <span class="small muted">API tokens and the action history for this node.</span>
+        </div>
+      </header>
+
+      <div class="split">
+        <section class="card wide" aria-labelledby="tokensH">
+          <div class="card-head">
+            <h2 id="tokensH">API tokens</h2>
+            <button class="btn-sm btn-primary" id="newToken">Issue token</button>
+          </div>
+          <div class="table-scroll">
+            <table class="data" id="tokensTable">
+              <thead><tr>
+                <th scope="col">Label</th><th scope="col">Owner</th><th scope="col">Scope</th>
+                <th scope="col">Created</th><th scope="col">Last used</th><th scope="col"><span class="sr-only">Actions</span></th>
+              </tr></thead>
+              <tbody id="tokensBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="card-foot">
+            <span>Tokens are shown once at creation and stored only as a hash.</span>
+          </div>
+        </section>
+
+        <div class="side">
+          <div class="card card-pad">
+            <h2 style="margin-bottom:10px">Your token</h2>
+            <div class="field">
+              <label for="tokenInput">Sent as <span class="mono">Authorization: Bearer …</span></label>
+              <input type="password" id="tokenInput" class="mono" placeholder="paste token" autocomplete="off">
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button id="saveToken" class="btn-primary btn-sm">Save</button>
+              <button id="clearToken" class="btn-sm">Clear</button>
+            </div>
+            <p class="small muted" style="margin:10px 0 0">Kept in this browser only.</p>
+          </div>
+
+          <section class="card" aria-labelledby="auditH">
+            <div class="card-head"><h2 id="auditH">Recent actions</h2></div>
+            <div class="table-scroll">
+              <table class="data" id="auditTable">
+                <thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action</th></tr></thead>
+                <tbody id="auditBody"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+  </main>
 </div>
 
-<script src="{{ url_for('static', filename='tab1_submission.js') }}"></script>
-<script src="{{ url_for('static', filename='tab2_results_table.js') }}"></script>
-<script src="{{ url_for('static', filename='tab7_jobs.js') }}"></script>
-<script type="module" src="{{ url_for('static', filename='index.js') }}"></script>
+<!-- Residue picker dialog. Kept here, outside the uploadForm element, because a
+     dialog nested in a form submits with it and would be clipped by the card's
+     overflow. Populated by static/js/residues.js from /api/residues. -->
+<div id="residueModal" class="res-modal" hidden>
+  <div class="res-modal__backdrop" data-res-close></div>
+  <div class="res-modal__panel" role="dialog" aria-modal="true"
+       aria-labelledby="residueModalTitle">
+
+    <div class="res-modal__head">
+      <div style="flex:1">
+        <h2 id="residueModalTitle" style="font-size:15px">Choose design residues</h2>
+        <span class="sub-note">Ticked residues may be placed at any position
+          pepspec designs.</span>
+      </div>
+      <button type="button" class="btn-sm" data-res-close>Close</button>
+    </div>
+
+    <div class="res-modal__tools">
+      <div class="field" style="margin:0">
+        <label class="sr-only" for="residueSearch">Filter residues</label>
+        <input type="search" id="residueSearch" autocomplete="off"
+               placeholder="Filter by code or name…">
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink)">
+        <input type="checkbox" id="residueOnlyRotlib" style="width:auto;margin-top:3px">
+        <span>Only residues with a rotamer library
+          <span class="sub-note">Without one, Rosetta builds a single rotamer for
+            that residue, so the packer cannot explore its side chain.</span></span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink)">
+        <input type="checkbox" id="residueOnlyFoldx" style="width:auto;margin-top:3px">
+        <span>Only residues FoldX can score
+          <span class="sub-note">FoldX has parameters for only a few
+            non-canonicals. It does not fail on the others — it silently drops
+            the residue and scores the rest of the peptide — so those designs
+            get no ΔΔG and are ranked on Rosetta’s interface and binding
+            scores instead.</span></span>
+      </label>
+    </div>
+
+    <div class="res-modal__body" id="residueSections">
+      <p class="empty">Loading the residue catalogue…</p>
+    </div>
+
+    <div class="res-modal__foot">
+      <span class="small muted" id="residueModalCount"></span>
+      <span style="flex:1"></span>
+      <button type="button" class="btn-sm" id="residueClearAll">Clear all</button>
+      <button type="button" class="btn-sm btn-primary" id="residueApply">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Picker styling now lives in static/css/style.css, under the
+     "residue picker" heading. It was inline here, which meant it came
+     AFTER the stylesheet in document order and silently won every
+     conflict -- so the themed rules in style.css had no effect on this
+     dialog. Keep it in the stylesheet. -->
+
+<!-- NGL, served locally from dist/ngl.js.
+     NOT ngl.umd.js: that build declares three, chroma-js, signals and
+     sprintf-js as externals and expects them as pre-existing globals
+     (window.three, window.chroma, ...). With none of them present the factory
+     throws and leaves window.NGL as an empty object, so `new NGL.Stage()`
+     fails with "not a constructor". dist/ngl.js bundles those dependencies. -->
+<script src="{{ url_for('static', filename='js/ngl.js') }}"></script>
+<!-- Plotly, served locally from the copy bundled inside the pip plotly package
+     (plotly/package_data/plotly.min.js), not a CDN -- same arrangement as
+     ngl.js above. A plain script, not a module, so it lands on window.Plotly;
+     plots.js checks for it and degrades the panels rather than breaking the
+     page if it fails to load. -->
+<script src="{{ url_for('static', filename='js/plotly.min.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
 
 </body>
 </html>

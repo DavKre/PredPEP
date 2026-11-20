@@ -1,0 +1,1436 @@
+/* predPEP dashboard — single stylesheet. No build step, no framework.
+
+   ===================================================================
+   HOW THEMING WORKS HERE — read this before adding a theme or a rule
+   ===================================================================
+
+   A THEME IS A BLOCK OF TOKENS AND NOTHING ELSE. There is no rule anywhere
+   below that is scoped to a theme. If you find yourself writing
+
+       :root[data-theme="warm"] .card-head h2 { font-family: ... }
+
+   stop: add a token instead. The first version of this file themed the
+   structure with 42 override rules, and adding two more themes would have
+   meant roughly 84 more. Worse, those overrides compete on specificity with
+   the component rules — :root[data-theme="light"] .chip at (0,3,0) silently
+   beat .seq .chip at (0,2,0) and put a 34px tap target inside an 18px row
+   of residues. Tokens cannot do that to you.
+
+   So the tokens cover more than colour. They also carry:
+
+     - the typographic REGISTER of the interface chrome (--label-*,
+       --title-*, --value-*, --badge-*, --chip-*). Two registers are in play:
+       an instrument register (monospace, uppercase, tracked, the way a label
+       is etched beside a readout) and a document register (the system sans,
+       sentence case). A theme picks one.
+     - DECORATION that some themes have and others do not: corner brackets on
+       panels, the marker beside a panel title, the lit edge on the current
+       nav item, the page's rule grid. Each is a display token, set to none
+       by the themes that do without.
+     - GLOW. Set to `none` rather than removed, so a theme that wants no glow
+       says so once.
+     - the CHART RAMPS, because a ramp is a palette decision and belongs with
+       the palette. charts.js and plots.js read these at draw time.
+
+   Adding a fifth theme is one block of tokens. Nothing else changes.
+
+   No webfonts: this runs on a LAN behind an egress allowlist, so a font CDN
+   would fail to load and fall back anyway.
+
+
+   ===================================================================
+   THE FOUR THEMES
+   ===================================================================
+
+   dark        The default. An instrument panel: near-black navy, cyan for
+               structure, magenta reserved for non-canonical residues.
+   light       The original predPEP palette, preserved exactly.
+   warm        Paper. Low blue light for long evening sessions, the way a
+               printed figure or a lab notebook reads.
+   scientific  Publication register. The chrome is ACHROMATIC — every grey is
+               a true neutral — so the only colour on the page is the data:
+               residue chips, status, and the chart ramps, which are viridis
+               and RdBu because those are perceptually uniform and safe for
+               colour-blind readers.
+
+   One rule holds across all four: cyan/accent is structure, and the
+   non-canonical colour is used for non-canonical residues and nothing else.
+   A one-letter FASTA view collapses every NCAA to "X", so the loudest thing
+   on the screen should be the thing the tool exists to surface.
+*/
+
+/* ================================================================= DARK
+   The default, so it sits on bare :root as well as its own attribute. */
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* -- surfaces. Each step is a real step; four surfaces within ~4%
+        lightness of each other read as one muddy plane on a dark screen. */
+  --bg:            #060A12;
+  --surface:       #0C1522;
+  --surface-sunk:  #080F1A;
+  --surface-up:    #122032;
+  --rail:          #05090F;
+  --rail-hover:    #0D1826;
+  --rail-active:   #13263A;
+  --console:       #04080E;
+
+  /* -- ink. Measured, not estimated: --ink 14.9:1 on --surface, --ink-2
+        9.3:1, --ink-3 5.8:1. Dimmest pair in the sheet is --ink-3 on
+        --surface-up at 5.2:1. */
+  --ink:           #DCE9F8;
+  --ink-2:         #A6BBD4;
+  --ink-3:         #7C93AE;
+  --ink-rail:      #B8CCE4;
+  --ink-rail-dim:  #7389A4;
+  --muted:         var(--ink-3);   /* plots.js asks for this name */
+
+  /* -- hairlines, not shadows. A dark panel separated by a shadow reads as
+        blur; separated by a 1px line it reads as an instrument. */
+  --line:          rgba(125, 185, 232, .17);
+  --line-soft:     rgba(125, 185, 232, .09);
+  --line-bright:   rgba(34, 211, 238, .42);
+
+  --accent:        #22D3EE;
+  --accent-ink:    #7DE7F7;
+  --accent-tint:   rgba(34, 211, 238, .13);
+  --accent-glow:   rgba(34, 211, 238, .30);
+
+  --ncaa:          #FF4D9D;
+  --ncaa-ink:      #FF8FC1;
+  --ncaa-tint:     rgba(255, 77, 157, .15);
+  --ncaa-edge:     rgba(255, 77, 157, .45);
+
+  /* Status. A real regression on dark grounds, stated plainly: on white the
+     original palette separated these by lightness as well as hue, so they
+     survived colour blindness. Here everything must be light enough to read,
+     which compresses that range — the inks measure ok 0.708, warn 0.688,
+     accent 0.682, bad 0.492, so only "bad" is separable by lightness alone.
+     What carries the distinction is the word: every badge renders its status
+     as text. Do not reduce a badge to a coloured dot. */
+  --ok:            #3DDC97;  --ok-ink:   #86EFC4;  --ok-tint:   rgba(61, 220, 151, .14);
+  --warn:          #FFB224;  --warn-ink: #FFD27A;  --warn-tint: rgba(255, 178, 36, .15);
+  --bad:           #FF5C7A;  --bad-ink:  #FF9FB1;  --bad-tint:  rgba(255, 92, 122, .15);
+  --dres:          #A78BFA;  --dres-ink: #C9B6FF;  --dres-tint: rgba(167, 139, 250, .16);
+  --dres-edge:     rgba(167, 139, 250, .42);
+
+  --field-bg:      #080F1A;
+  --field-line:    rgba(125, 185, 232, .22);
+  --hover:         rgba(125, 185, 232, .06);
+
+  --btn-bg:          var(--surface-up);
+  --btn-hover-bg:    var(--rail-active);
+  --btn-hover-line:  var(--line-bright);
+  --btn-pri-bg:      var(--accent-tint);
+  --btn-pri-fg:      var(--accent-ink);
+  --btn-pri-line:    var(--accent);
+  --btn-pri-hover:   rgba(34, 211, 238, .22);
+  --btn-danger-bg:   var(--bad-tint);
+  --btn-danger-line: rgba(255, 92, 122, .45);
+
+  --row-selected-bg:     var(--accent-tint);
+  --row-selected-shadow: inset 2px 0 0 var(--accent), inset 0 0 26px rgba(34, 211, 238, .07);
+
+  --backdrop:      rgba(2, 5, 10, .72);
+  --panel-shadow:  0 24px 70px rgba(0, 0, 0, .6), 0 0 0 1px var(--line-soft);
+  --swatch-ring:   rgba(255, 255, 255, .22);
+
+  --overlay-bg:    rgba(6, 10, 18, .82);
+  --overlay-line:  var(--line);
+  --overlay-blur:  blur(3px);
+
+  --res-bg:        var(--surface-up);
+  --res-fg:        var(--ink-2);
+  --console-fg:    var(--ink-2);
+  --live-fg:       var(--ok-ink);
+
+  /* -- register: instrument */
+  --label-font:    var(--mono);
+  --label-size:    10px;
+  --label-size-xs: 10px;
+  --label-case:    uppercase;
+  --label-track:   .13em;
+  --label-weight:  600;
+
+  --title-font:    var(--mono);
+  --title-size:    11px;
+  --title-case:    uppercase;
+  --title-track:   .13em;
+  --title-weight:  600;
+  --title-fg:      var(--ink-2);
+
+  --value-font:    var(--mono);
+  --value-size:    25px;
+  --value-track:   -.02em;
+
+  --badge-font:    var(--mono);
+  --badge-size:    10px;
+  --badge-weight:  600;
+  --badge-case:    uppercase;
+  --badge-track:   .08em;
+  --badge-radius:  3px;
+  --badge-pad:     2px 8px;
+  --badge-border:  1px;
+
+  --chip-font:     var(--mono);
+  --chip-h:        30px;
+  --chip-bg:       transparent;
+
+  --res-track:     .04em;
+  --res-weight:    600;
+
+  --th-case:       uppercase;
+  --th-track:      .11em;
+  --th-weight:     600;
+  --th-size:       10px;
+  --th-rule:       1px solid var(--line);
+
+  /* -- decoration */
+  --bracket:       block;
+  --rail-marker:   block;
+  --title-marker:  block;
+  --page-grid:     block;
+
+  /* -- glow. `none` rather than absent, so a theme opts out once. */
+  --glow-value:    0 0 18px var(--accent-glow);
+  --glow-meter:    0 0 10px var(--accent-glow);
+  --glow-rail:     0 0 9px var(--accent-glow);
+  --glow-marker:   0 0 7px var(--accent-glow);
+  --glow-dot:      0 0 8px rgba(61, 220, 151, .7);
+  --glow-res:      0 0 10px rgba(255, 77, 157, .34);
+
+  --radius:        5px;
+  --radius-sm:     4px;
+
+  /* -- chart ramps. Read by charts.js and plots.js at draw time.
+
+     THE TWO SEQUENTIAL RAMPS RUN IN OPPOSITE ORDER, deliberately, because
+     the two consumers index them in opposite order:
+       --ramp-seq         charts.js. WORST FIRST — it maps the highest value
+                          to index 0, and the highest ddG is the worst.
+       --ramp-seq-plotly  plots.js. BEST FIRST — a Plotly colorscale maps
+                          position 0.0 to zmin, the lowest and best value.
+     One shared token would come out right in one file and silently inverted
+     in the other. If you edit one, reverse the other.
+
+     Direction also differs from the light theme on purpose: on white the
+     salient end is dark, but here dark IS the background, so the salient end
+     has to be the bright one or the best designs sink into the panel. */
+  --ramp-seq:        #2A3550, #33486E, #2F6E9E, #1E9FC4, #22D3EE, #7DE7F7;
+  --ramp-seq-plotly: #7DE7F7, #22D3EE, #1E9FC4, #2F6E9E, #33486E, #2A3550;
+  /* Diverging, Plotly order: -1 at position 0, +1 at 1. The midpoint must
+     RECEDE — on a dark ground a near-white midpoint makes zero correlation,
+     the least interesting value, the brightest band in the figure. */
+  --ramp-div:        #FFB224, #C98A3A, #16202F, #3B82F6, #7DE7F7;
+}
+
+/* ================================================================ LIGHT
+   The original predPEP palette and register, preserved. */
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg:            #F4F5F2;
+  --surface:       #FFFFFF;
+  --surface-sunk:  #ECEEEA;
+  --surface-up:    #FFFFFF;
+  --rail:          #12161B;
+  --rail-hover:    #1A2028;
+  --rail-active:   #232B35;
+  --console:       #0E1116;
+
+  --ink:           #15181C;
+  --ink-2:         #3E444B;
+  --ink-3:         #5B6168;
+  --ink-rail:      #C4CAD1;
+  --ink-rail-dim:  #8E96A0;
+  --muted:         var(--ink-3);
+
+  --line:          #DCDFD8;
+  --line-soft:     #EEF0EC;
+  --line-bright:   #2456C9;
+
+  --accent:        #2456C9;
+  --accent-ink:    #173E99;
+  --accent-tint:   #E3E9F8;
+  --accent-glow:   rgba(36, 86, 201, .18);
+
+  --ncaa:          #6B4200;
+  --ncaa-ink:      #6B4200;
+  --ncaa-tint:     #F3E6D2;
+  --ncaa-edge:     transparent;
+
+  --ok:   #1E7A4C;  --ok-ink:   #145A37;  --ok-tint:   #E2F2E8;
+  --warn: #B06000;  --warn-ink: #7A4500;  --warn-tint: #FBEBD3;
+  --bad:  #C5221F;  --bad-ink:  #8E1B12;  --bad-tint:  #FBE3E1;
+  --dres: #45307A;  --dres-ink: #45307A;  --dres-tint: #E7E2F4;
+  --dres-edge: transparent;
+
+  --field-bg:      #FFFFFF;
+  --field-line:    #D3D7D0;
+  --hover:         rgba(0, 0, 0, .035);
+
+  --btn-bg:          var(--surface);
+  --btn-hover-bg:    #F7F8F5;
+  --btn-hover-line:  var(--field-line);
+  --btn-pri-bg:      var(--accent);
+  --btn-pri-fg:      #FFFFFF;
+  --btn-pri-line:    var(--accent);
+  --btn-pri-hover:   var(--accent-ink);
+  --btn-danger-bg:   var(--surface);
+  --btn-danger-line: #E3B4AE;
+
+  --row-selected-bg:     #F2F6FF;
+  --row-selected-shadow: inset 3px 0 0 var(--accent);
+
+  --backdrop:      rgba(0, 0, 0, .42);
+  --panel-shadow:  0 18px 48px rgba(0, 0, 0, .24);
+  --swatch-ring:   rgba(0, 0, 0, .12);
+
+  --overlay-bg:    rgba(255, 255, 255, .88);
+  --overlay-line:  transparent;
+  --overlay-blur:  none;
+
+  --res-bg:        var(--surface-sunk);
+  --res-fg:        #2B2F35;
+  --console-fg:    #B7C0CA;
+  --live-fg:       #3CC17A;
+
+  /* -- register: document */
+  --label-font:    var(--sans);
+  --label-size:    12px;
+  --label-size-xs: 11px;
+  --label-case:    none;
+  --label-track:   .6px;
+  --label-weight:  400;
+
+  --title-font:    var(--sans);
+  --title-size:    15px;
+  --title-case:    none;
+  --title-track:   normal;
+  --title-weight:  600;
+  --title-fg:      var(--ink);
+
+  --value-font:    var(--sans);
+  --value-size:    26px;
+  --value-track:   normal;
+
+  --badge-font:    var(--sans);
+  --badge-size:    11px;
+  --badge-weight:  500;
+  --badge-case:    none;
+  --badge-track:   normal;
+  --badge-radius:  11px;
+  --badge-pad:     2px 9px;
+  --badge-border:  0;
+
+  --chip-font:     var(--sans);
+  --chip-h:        34px;
+  --chip-bg:       var(--surface);
+
+  --res-track:     normal;
+  --res-weight:    500;
+
+  --th-case:       none;
+  --th-track:      normal;
+  --th-weight:     500;
+  --th-size:       12px;
+  --th-rule:       none;
+
+  --bracket:       none;
+  --rail-marker:   none;
+  --title-marker:  none;
+  --page-grid:     none;
+
+  --glow-value:    none;
+  --glow-meter:    none;
+  --glow-rail:     none;
+  --glow-marker:   none;
+  --glow-dot:      none;
+  --glow-res:      none;
+
+  --radius:        8px;
+  --radius-sm:     6px;
+
+  /* The originals, so figures match what this theme drew before. These were
+     two separately tuned ramps rather than one reversed, which is why they
+     are not mirrors of each other. */
+  --ramp-seq:        #9AA3AD, #7E93B8, #5E7FBE, #3A62BC, #1F4CB0, #12337F;
+  --ramp-seq-plotly: #0b2f6b, #1d4ed8, #6aa0e8, #b9cdf2, #e8eefb;
+  --ramp-div:        #b45309, #d99a4e, #f3f4f6, #6aa0e8, #1d4ed8;
+}
+
+/* ================================================================= WARM
+   Paper. For long sessions and evening work: a parchment ground, warm greys,
+   and a terracotta accent, with no blue-white anywhere. The rail stays dark
+   so the shell still frames the work, but it is a warm brown-black rather
+   than a cool one.
+
+   The non-canonical colour moves to plum. It has to stay clearly apart from
+   the terracotta accent, which rules out the amber used on the light theme. */
+
+:root[data-theme="warm"] {
+  color-scheme: light;
+
+  --bg:            #F3ECDE;
+  --surface:       #FFFBF3;
+  --surface-sunk:  #EDE3D1;
+  --surface-up:    #FFFBF3;
+  --rail:          #332A22;
+  --rail-hover:    #42362C;
+  --rail-active:   #544538;
+  --console:       #2A221B;
+
+  --ink:           #2B2219;
+  --ink-2:         #574838;
+  --ink-3:         #756350;
+  --ink-rail:      #E6D9C6;
+  --ink-rail-dim:  #AD9C87;
+  --muted:         var(--ink-3);
+
+  --line:          #DCCFB8;
+  --line-soft:     #EDE4D4;
+  --line-bright:   #A8532A;
+
+  --accent:        #A8532A;
+  --accent-ink:    #7E3A18;
+  --accent-tint:   #F4E2D2;
+  --accent-glow:   rgba(168, 83, 42, .18);
+
+  --ncaa:          #8E2A63;
+  --ncaa-ink:      #6E1D4B;
+  --ncaa-tint:     #F4DCE8;
+  --ncaa-edge:     transparent;
+
+  /* warn is pushed yellow and ok pushed green so neither collides with the
+     terracotta accent; bad is a deep brick, darker than all of them. */
+  --ok:   #2E6B42;  --ok-ink:   #1E4D2D;  --ok-tint:   #DFEDDF;
+  --warn: #8A6500;  --warn-ink: #614700;  --warn-tint: #F6EACB;
+  --bad:  #A32A20;  --bad-ink:  #7A1C14;  --bad-tint:  #F6DED9;
+  --dres: #5B4A96;  --dres-ink: #413472;  --dres-tint: #E7E2F2;
+  --dres-edge: transparent;
+
+  --field-bg:      #FFFDF8;
+  --field-line:    #D2C2A8;
+  --hover:         rgba(90, 70, 45, .05);
+
+  --btn-bg:          var(--surface);
+  --btn-hover-bg:    #F7EFE1;
+  --btn-hover-line:  var(--field-line);
+  --btn-pri-bg:      var(--accent);
+  --btn-pri-fg:      #FFFBF3;
+  --btn-pri-line:    var(--accent);
+  --btn-pri-hover:   var(--accent-ink);
+  --btn-danger-bg:   var(--surface);
+  --btn-danger-line: #D9AFA6;
+
+  --row-selected-bg:     #F7E8D8;
+  --row-selected-shadow: inset 3px 0 0 var(--accent);
+
+  --backdrop:      rgba(40, 30, 20, .46);
+  --panel-shadow:  0 18px 48px rgba(70, 50, 30, .22);
+  --swatch-ring:   rgba(60, 45, 30, .14);
+
+  --overlay-bg:    rgba(255, 251, 243, .9);
+  --overlay-line:  var(--line);
+  --overlay-blur:  none;
+
+  --res-bg:        var(--surface-sunk);
+  --res-fg:        #3A2E22;
+  --console-fg:    #D8C9B4;
+  --live-fg:       #6FBF86;
+
+  /* -- register: document, with a touch more tracking on labels than the
+        light theme; printed matter tracks its small caps. */
+  --label-font:    var(--sans);
+  --label-size:    11px;
+  --label-size-xs: 11px;
+  --label-case:    uppercase;
+  --label-track:   .09em;
+  --label-weight:  600;
+
+  --title-font:    var(--sans);
+  --title-size:    14px;
+  --title-case:    none;
+  --title-track:   normal;
+  --title-weight:  600;
+  --title-fg:      var(--ink);
+
+  --value-font:    var(--sans);
+  --value-size:    26px;
+  --value-track:   normal;
+
+  --badge-font:    var(--sans);
+  --badge-size:    11px;
+  --badge-weight:  600;
+  --badge-case:    none;
+  --badge-track:   normal;
+  --badge-radius:  10px;
+  --badge-pad:     2px 9px;
+  --badge-border:  1px;
+
+  --chip-font:     var(--sans);
+  --chip-h:        32px;
+  --chip-bg:       var(--surface);
+
+  --res-track:     normal;
+  --res-weight:    600;
+
+  --th-case:       uppercase;
+  --th-track:      .08em;
+  --th-weight:     600;
+  --th-size:       10.5px;
+  --th-rule:       1px solid var(--line);
+
+  --bracket:       none;
+  --rail-marker:   block;
+  --title-marker:  block;
+  --page-grid:     none;
+
+  --glow-value:    none;
+  --glow-meter:    none;
+  --glow-rail:     none;
+  --glow-marker:   none;
+  --glow-dot:      none;
+  --glow-res:      none;
+
+  --radius:        6px;
+  --radius-sm:     4px;
+
+  /* Earth ramp, best = darkest (correct on a light ground). */
+  --ramp-seq:        #CFC0A8, #C79F77, #B87B46, #A8532A, #8A3A18, #65270F;
+  --ramp-seq-plotly: #65270F, #8A3A18, #A8532A, #B87B46, #C79F77, #CFC0A8;
+  --ramp-div:        #A8532A, #CF9A6E, #F3ECDE, #6E9EA8, #2A5F6E;
+}
+
+/* =========================================================== SCIENTIFIC
+   Publication register. Every grey here is a TRUE NEUTRAL — equal R, G and B
+   — so the interface chrome carries no hue at all and the only colour on the
+   page is data: residue chips, status, and the chart ramps.
+
+   That is the whole idea, so do not add a tinted grey or a coloured accent
+   to this theme. Selection and focus are shown by weight and a solid rule,
+   not by a colour, which is how a journal table does it.
+
+   The ramps are viridis (sequential) and RdBu (diverging). Both are
+   perceptually uniform and both stay readable in greyscale and for
+   colour-blind readers, which matters more here than matching the UI. */
+
+:root[data-theme="scientific"] {
+  color-scheme: light;
+
+  --bg:            #F7F7F7;
+  --surface:       #FFFFFF;
+  --surface-sunk:  #F0F0F0;
+  --surface-up:    #FAFAFA;
+  --rail:          #1A1A1A;
+  --rail-hover:    #2B2B2B;
+  --rail-active:   #3C3C3C;
+  --console:       #121212;
+
+  --ink:           #111111;
+  --ink-2:         #3D3D3D;
+  --ink-3:         #666666;
+  --ink-rail:      #E2E2E2;
+  --ink-rail-dim:  #9B9B9B;
+  --muted:         var(--ink-3);
+
+  --line:          #D0D0D0;
+  --line-soft:     #E8E8E8;
+  --line-bright:   #111111;
+
+  /* Achromatic on purpose. */
+  --accent:        #111111;
+  --accent-ink:    #000000;
+  --accent-tint:   #EDEDED;
+  --accent-glow:   transparent;
+
+  --ncaa:          #B3006B;
+  --ncaa-ink:      #8A0052;
+  --ncaa-tint:     #FBE3F0;
+  --ncaa-edge:     #E8A8CC;
+
+  --ok:   #1A7A3C;  --ok-ink:   #11592A;  --ok-tint:   #E4F1E8;
+  --warn: #8A6A00;  --warn-ink: #645000;  --warn-tint: #F6EFD8;
+  --bad:  #B01A14;  --bad-ink:  #85120E;  --bad-tint:  #FAE2E0;
+  --dres: #4A3A9E;  --dres-ink: #352A75;  --dres-tint: #E6E3F5;
+  --dres-edge: #B9B1E0;
+
+  --field-bg:      #FFFFFF;
+  --field-line:    #BFBFBF;
+  --hover:         #F5F5F5;
+
+  --btn-bg:          var(--surface);
+  --btn-hover-bg:    #F0F0F0;
+  --btn-hover-line:  #8A8A8A;
+  --btn-pri-bg:      #111111;
+  --btn-pri-fg:      #FFFFFF;
+  --btn-pri-line:    #111111;
+  --btn-pri-hover:   #000000;
+  --btn-danger-bg:   var(--surface);
+  --btn-danger-line: #C9A09E;
+
+  --row-selected-bg:     #EDEDED;
+  --row-selected-shadow: inset 3px 0 0 #111111;
+
+  --backdrop:      rgba(0, 0, 0, .46);
+  --panel-shadow:  0 10px 34px rgba(0, 0, 0, .18);
+  --swatch-ring:   rgba(0, 0, 0, .18);
+
+  --overlay-bg:    rgba(255, 255, 255, .92);
+  --overlay-line:  var(--line);
+  --overlay-blur:  none;
+
+  --res-bg:        var(--surface-sunk);
+  --res-fg:        #1E1E1E;
+  --console-fg:    #D6D6D6;
+  --live-fg:       #4FBF72;
+
+  /* -- register: instrument, because a figure panel labels itself that way */
+  --label-font:    var(--mono);
+  --label-size:    10px;
+  --label-size-xs: 10px;
+  --label-case:    uppercase;
+  --label-track:   .1em;
+  --label-weight:  600;
+
+  --title-font:    var(--mono);
+  --title-size:    11px;
+  --title-case:    uppercase;
+  --title-track:   .1em;
+  --title-weight:  700;
+  --title-fg:      var(--ink);
+
+  --value-font:    var(--mono);
+  --value-size:    24px;
+  --value-track:   -.01em;
+
+  --badge-font:    var(--mono);
+  --badge-size:    10px;
+  --badge-weight:  600;
+  --badge-case:    uppercase;
+  --badge-track:   .07em;
+  --badge-radius:  2px;
+  --badge-pad:     2px 7px;
+  --badge-border:  1px;
+
+  --chip-font:     var(--mono);
+  --chip-h:        30px;
+  --chip-bg:       var(--surface);
+
+  --res-track:     .03em;
+  --res-weight:    700;
+
+  --th-case:       uppercase;
+  --th-track:      .09em;
+  --th-weight:     700;
+  --th-size:       10px;
+  --th-rule:       1px solid #111111;
+
+  --bracket:       none;
+  --rail-marker:   block;
+  --title-marker:  none;
+  --page-grid:     none;
+
+  --glow-value:    none;
+  --glow-meter:    none;
+  --glow-rail:     none;
+  --glow-marker:   none;
+  --glow-dot:      none;
+  --glow-res:      none;
+
+  --radius:        2px;
+  --radius-sm:     2px;
+
+  /* viridis, worst-first for charts.js and best-first for plots.js.
+     Viridis runs dark purple (low) to yellow (high); low ddG is better, so
+     best = #440154 and worst = #FDE725. */
+  --ramp-seq:        #FDE725, #90D743, #35B779, #21918C, #31688E, #440154;
+  --ramp-seq-plotly: #440154, #31688E, #21918C, #35B779, #90D743, #FDE725;
+  /* RdBu, Plotly order: -1 red, 0 neutral, +1 blue. */
+  --ramp-div:        #B2182B, #EF8A62, #F7F7F7, #67A9CF, #2166AC;
+}
+
+/* ================================================================= base */
+
+:root {
+  --mono: ui-monospace, "SF Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  /* plots.js asks for these names. */
+  --font-mono: var(--mono);
+  --font-sans: var(--sans);
+  --rail-w: 228px;
+
+  /* ------------------------------------------------------- series colours
+     The categorical palette for charts. Five, in a fixed order, read by
+     plots.js and charts.js. Any theme may override these; none currently
+     does, because the set below was validated against BOTH the dark panel
+     (#0C1522) and a white one and passes on each, so one set serves all four.
+
+     Checked, not chosen by eye: lightness band, chroma floor, CVD separation,
+     normal-vision floor and contrast >= 3:1 vs the surface. Worst adjacent
+     pair is deuteranopia dE 8.4, normal-vision floor 25.5.
+
+     WHY ONLY FIVE, when the iteration cap is six: a sixth hue cannot be added
+     without some PAIR colliding. Checked across every pair rather than only
+     neighbours -- which is what a scatter actually shows at once -- the best
+     six-colour sets put green against magenta at dE 2.9 for a deuteranope,
+     i.e. the same colour. So five is the honest ceiling here. A field with
+     more than five values folds the remainder into one grey "other" bucket
+     rather than reusing a hue, and anything ORDERED (iteration, a score) uses
+     the sequential ramp instead, where lightness carries the order and colour
+     vision is not required at all.
+
+     These are NOT the accent tokens. --accent is picked so TEXT reads against
+     the surface, which wants high contrast; a series mark wants to sit in a
+     narrow lightness band so no series shouts purely by being brighter. Using
+     the accents here failed the lightness band on all five. */
+  --series-1: #0E93B2;
+  --series-2: #DE2E86;
+  --series-3: #BE8A10;
+  --series-4: #8260E6;
+  --series-5: #20A070;
+  /* Sixth series. Added so iteration can be categorical: a run goes to
+     PREDPEP_MAX_ITERATIONS (6), and with five colours the last round fell into
+     --series-other grey. Chosen by searching for the colour that keeps the
+     worst pair in the set no lower than the five already managed, measured as
+     CIEDE2000 over Vienot dichromat projections; plots.js records the numbers. */
+  --series-6: #90D800;
+  /* Everything beyond the five, and anything unmatched. Deliberately grey. */
+  --series-other: #8A93A0;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A faint rule grid, fixed so it reads as the surface the panels sit on
+   rather than as content that scrolls. ~2% alpha: enough to catch the light
+   at the edge of a panel, not enough to compete with a table. */
+body::before {
+  content: "";
+  display: var(--page-grid);
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    linear-gradient(rgba(125, 185, 232, .022) 1px, transparent 1px) 0 0 / 100% 46px,
+    linear-gradient(90deg, rgba(125, 185, 232, .022) 1px, transparent 1px) 0 0 / 46px 100%,
+    radial-gradient(120% 90% at 50% 0%, rgba(34, 211, 238, .05), transparent 62%);
+}
+
+.shell, .rail, .main { position: relative; z-index: 1; }
+
+h1, h2, h3 { margin: 0; font-weight: 600; }
+h1 { font-size: 21px; letter-spacing: -.01em; }
+h2, h3 { font-size: 13px; }
+
+a { color: var(--accent); }
+a:hover { color: var(--accent-ink); }
+
+.mono { font-family: var(--mono); }
+.num  { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-3); }
+.small { font-size: 12px; }
+.hidden { display: none !important; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ---------------------------------------------------------------- shell */
+
+.shell { display: flex; flex-wrap: wrap; min-height: 100vh; }
+
+.rail {
+  flex: 1 1 var(--rail-w);
+  max-width: 100%;
+  background: var(--rail);
+  color: var(--ink-rail);
+  display: flex; flex-direction: column; gap: 20px;
+  padding: 20px 14px;
+  border-right: 1px solid var(--line);
+}
+
+.rail-brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+.rail-brand strong {
+  color: #fff; font-size: 16px;
+  letter-spacing: var(--label-track); text-transform: var(--label-case);
+}
+.rail-brand span {
+  display: block; font-size: 11px; color: var(--ink-rail-dim);
+  font-family: var(--label-font); letter-spacing: var(--label-track);
+}
+.rail-brand svg { stroke: var(--accent); }
+
+.rail-nav { display: flex; flex-direction: column; gap: 2px; }
+.rail-nav a {
+  position: relative;
+  display: flex; align-items: center; gap: 10px;
+  min-height: 42px; padding: 0 10px 0 12px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-rail); text-decoration: none; font-size: 13px;
+}
+.rail-nav a:hover { background: var(--rail-hover); color: #fff; }
+.rail-nav a[aria-current="page"] { background: var(--rail-active); color: #fff; font-weight: 500; }
+/* A lit edge marks the position without turning a quarter of the rail into a
+   slab of colour. Themes without it set --rail-marker: none. */
+.rail-nav a[aria-current="page"]::before {
+  content: ""; display: var(--rail-marker);
+  position: absolute; left: 0; top: 7px; bottom: 7px; width: 2px;
+  background: var(--accent); box-shadow: var(--glow-rail);
+}
+.rail-nav svg { flex: none; }
+
+.rail-foot {
+  margin-top: auto;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 11px 12px;
+  border-radius: var(--radius);
+  background: var(--rail-hover);
+  border: 1px solid var(--line-soft);
+  font-size: 12px;
+}
+.rail-foot .dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+  box-shadow: var(--glow-dot); flex: none;
+}
+.rail-foot .row { display: flex; align-items: center; gap: 8px; color: #fff; }
+.rail-foot .ver { font-family: var(--mono); color: var(--ink-rail-dim); font-size: 11px; }
+
+/* ------------------------------------------------------------ theme picker
+   Four swatches in the rail foot. Each is a real button with an accessible
+   name, so this works from the keyboard and reads correctly aloud; the
+   swatch itself is decoration layered on top. */
+
+.theme-pick { display: flex; flex-direction: column; gap: 6px;
+              padding-top: 8px; border-top: 1px solid var(--line-soft); }
+.theme-pick__label {
+  font-family: var(--label-font); font-size: 10px;
+  text-transform: uppercase; letter-spacing: .1em;
+  color: var(--ink-rail-dim);
+}
+.theme-pick__row { display: flex; gap: 6px; }
+.theme-pick button {
+  flex: 1 1 0; min-width: 0; min-height: 26px; padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, .18);
+  background: var(--sw-bg, #888);
+  cursor: pointer; position: relative;
+  display: block;
+}
+.theme-pick button:hover { border-color: rgba(255, 255, 255, .5); }
+.theme-pick button[aria-pressed="true"] {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px var(--rail), 0 0 0 3px #fff;
+}
+/* The swatch previews the theme it switches to, so each carries its own two
+   key colours rather than the current theme's. */
+.theme-pick button[data-set="dark"]       { --sw-bg: linear-gradient(135deg, #0C1522 55%, #22D3EE 55%); }
+.theme-pick button[data-set="light"]      { --sw-bg: linear-gradient(135deg, #FFFFFF 55%, #2456C9 55%); }
+.theme-pick button[data-set="warm"]       { --sw-bg: linear-gradient(135deg, #FFFBF3 55%, #A8532A 55%); }
+.theme-pick button[data-set="scientific"] { --sw-bg: linear-gradient(135deg, #FFFFFF 55%, #111111 55%); }
+
+.main {
+  flex: 999 1 560px; min-width: 0;
+  padding: 20px 26px 40px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+.view-head {
+  display: flex; flex-wrap: wrap; gap: 16px;
+  align-items: flex-start; justify-content: space-between;
+}
+.view-head .titles { display: flex; flex-direction: column; gap: 3px; }
+.view-head .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* ---------------------------------------------------------------- cards */
+
+.card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+/* Corner brackets, one diagonal pair — the cheapest way to make a panel read
+   as an instrument rather than a web card, and it costs no markup. A pair
+   rather than four corners, because four closes the box in and starts to
+   look like a frame around a picture. Themes without them set --bracket. */
+.card::before,
+.card::after {
+  content: ""; display: var(--bracket);
+  position: absolute; width: 11px; height: 11px;
+  border: 1px solid var(--line-bright);
+  pointer-events: none;
+}
+.card::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; border-radius: var(--radius) 0 0 0; }
+.card::after  { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; border-radius: 0 0 var(--radius) 0; }
+
+.card-pad { padding: 14px 16px; }
+.card-head {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 11px 16px; border-bottom: 1px solid var(--line-soft);
+}
+.card-head h2, .card-head h3 {
+  font-family: var(--title-font); font-size: var(--title-size);
+  font-weight: var(--title-weight); letter-spacing: var(--title-track);
+  text-transform: var(--title-case); color: var(--title-fg);
+  display: flex; align-items: center; gap: 8px;
+}
+.card-head h2::before, .card-head h3::before {
+  content: ""; display: var(--title-marker);
+  width: 3px; height: 11px; background: var(--accent);
+  box-shadow: var(--glow-marker); flex: none;
+}
+
+.card-foot {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 9px 16px; border-top: 1px solid var(--line-soft);
+  font-size: 12px; color: var(--ink-3);
+}
+
+.grid { display: grid; gap: 10px; }
+.grid-stats { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.grid-2 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.split { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.split > .wide { flex: 999 1 560px; min-width: 0; }
+.split > .side { flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+
+/* ---------------------------------------------------------------- stats */
+
+.stat { display: flex; flex-direction: column; gap: 7px; padding: 13px 15px; }
+.stat-label {
+  font-family: var(--label-font); font-size: var(--label-size);
+  font-weight: var(--label-weight); letter-spacing: var(--label-track);
+  text-transform: var(--label-case); color: var(--ink-3);
+}
+/* Tabular so a changing number does not shuffle the digits beside it. The
+   glow lives only here — a big display figure can carry it, body text and
+   table cells cannot. */
+.stat-value {
+  font-family: var(--value-font); font-size: var(--value-size);
+  font-weight: 600; letter-spacing: var(--value-track);
+  font-variant-numeric: tabular-nums; color: var(--ink);
+  text-shadow: var(--glow-value);
+}
+.stat-value small { font-size: .58em; font-weight: 400; color: var(--ink-3); text-shadow: none; }
+
+.meter { height: 5px; border-radius: 3px; background: var(--surface-sunk);
+         overflow: hidden; border: 1px solid var(--line-soft); }
+.meter > i { display: block; height: 100%; background: var(--accent);
+             box-shadow: var(--glow-meter); transition: width .3s; }
+.meter.ok > i   { background: var(--ok); }
+.meter.warn > i { background: var(--warn); }
+.meter.bad > i  { background: var(--bad); }
+
+/* ---------------------------------------------------------------- controls */
+
+button, .btn {
+  font: inherit; font-weight: 500;
+  min-height: 38px; padding: 0 14px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  border: 1px solid var(--field-line); border-radius: var(--radius-sm);
+  background: var(--btn-bg); color: var(--ink);
+  cursor: pointer; text-decoration: none;
+}
+button:hover:not(:disabled), .btn:hover {
+  background: var(--btn-hover-bg); border-color: var(--btn-hover-line);
+}
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:focus-visible, .btn:focus-visible, input:focus-visible,
+select:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.btn-primary {
+  background: var(--btn-pri-bg); border-color: var(--btn-pri-line);
+  color: var(--btn-pri-fg); font-weight: 600;
+}
+.btn-primary:hover { background: var(--btn-pri-hover); border-color: var(--btn-pri-line); }
+.btn-danger { color: var(--bad-ink); border-color: var(--btn-danger-line); background: var(--btn-danger-bg); }
+.btn-danger:hover { background: var(--bad-tint); border-color: var(--bad); }
+.btn-sm { min-height: 30px; padding: 0 10px; font-size: 12px; }
+.btn-icon { width: 34px; min-height: 34px; padding: 0; }
+
+input[type=text], input[type=number], input[type=search],
+input[type=email], input[type=password], select {
+  font: inherit; min-height: 36px; padding: 0 10px;
+  border: 1px solid var(--field-line); border-radius: var(--radius-sm);
+  background: var(--field-bg); color: var(--ink); width: 100%;
+}
+input::placeholder { color: var(--ink-3); }
+input[type=file] { font: inherit; width: 100%; padding: 8px 0; color: var(--ink-2); }
+select option { background: var(--surface-up); color: var(--ink); }
+label { font-size: 12px; color: var(--ink-3); }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  min-height: var(--chip-h); padding: 0 11px;
+  font-size: 11.5px; font-weight: 500;
+  font-family: var(--chip-font); letter-spacing: .02em;
+  border: 1px solid var(--field-line); border-radius: 15px;
+  background: var(--chip-bg); color: var(--ink-2); cursor: pointer;
+}
+.chip:hover { border-color: var(--line-bright); color: var(--ink); }
+.chip[aria-pressed="true"] {
+  background: var(--btn-pri-bg); border-color: var(--btn-pri-line); color: var(--btn-pri-fg);
+}
+
+/* ---------------------------------------------------------------- tables */
+
+/* contain: paint keeps the table's overflow inside this box. Without it the
+   WHOLE PAGE scrolled sideways on a narrow screen even though this element
+   was scrolling correctly on its own — the table's scrollable width was
+   propagating to the document, so the page gained ~317px of horizontal
+   scroll on Operations and ~340px on Admin. It is also simply true of a
+   scroll container, so it costs nothing. The alternatives both had side
+   effects: overflow:hidden on .card clips the corner brackets, and
+   overflow-x:clip higher up risks clipping the residue picker, which is a
+   fixed-position dialog living inside the admin view. */
+.table-scroll { overflow-x: auto; contain: paint; }
+table.data {
+  width: 100%; border-collapse: collapse; font-size: 12.5px;
+  /* A floor, so the eight columns stop stealing width from the sequence
+     cell. Without it the residue strip is the first thing to be squeezed:
+     below about 1450px the sequence column fell under ~230px and a plain
+     5-mer wrapped onto a second line, but only on the rows carrying an NCAA
+     marker — so half the table gained a line and it read as a rendering
+     fault rather than as wrapping. .table-scroll already scrolls, which is
+     the right answer for a wide data table and is what happens on a phone. */
+  min-width: 760px;
+}
+table.data th {
+  text-align: left; padding: 9px 8px; white-space: nowrap; color: var(--ink-3);
+  font-family: var(--label-font); font-size: var(--th-size);
+  font-weight: var(--th-weight); text-transform: var(--th-case);
+  letter-spacing: var(--th-track); border-bottom: var(--th-rule);
+}
+table.data th:first-child, table.data td:first-child { padding-left: 16px; }
+table.data th:last-child,  table.data td:last-child  { padding-right: 16px; }
+table.data td { padding: 9px 8px; border-top: 1px solid var(--line-soft); vertical-align: middle; }
+table.data tbody tr.pick { cursor: pointer; }
+table.data tbody tr.pick:hover { background: var(--hover); }
+table.data tbody tr[aria-selected="true"] {
+  background: var(--row-selected-bg); box-shadow: var(--row-selected-shadow);
+}
+th[aria-sort] { cursor: pointer; user-select: none; }
+th[aria-sort="ascending"]::after  { content: " ↑"; color: var(--accent); }
+th[aria-sort="descending"]::after { content: " ↓"; color: var(--accent); }
+
+/* ---------------------------------------------------------------- badges */
+
+.badge {
+  display: inline-block; padding: var(--badge-pad); border-radius: var(--badge-radius);
+  font-family: var(--badge-font); font-size: var(--badge-size);
+  font-weight: var(--badge-weight); text-transform: var(--badge-case);
+  letter-spacing: var(--badge-track); white-space: nowrap;
+  background: var(--surface-up); color: var(--ink-2);
+  border: var(--badge-border) solid var(--line);
+}
+.badge.running  { background: var(--accent-tint); color: var(--accent-ink); border-color: var(--accent); }
+.badge.queued   { background: var(--surface-up);  color: var(--ink-2); }
+.badge.complete { background: var(--ok-tint);     color: var(--ok-ink);   border-color: var(--ok); }
+.badge.partial  { background: var(--warn-tint);   color: var(--warn-ink); border-color: var(--warn); }
+.badge.failed   { background: var(--bad-tint);    color: var(--bad-ink);  border-color: var(--bad); }
+.badge.stopped  { background: var(--surface-up);  color: var(--ink-3); }
+.sub-note { display: block; font-size: 11px; color: var(--ink-3); }
+
+/* Iteration progress: one segment per iteration up to the cap. */
+.iters { display: grid; gap: 3px; grid-auto-flow: column; grid-auto-columns: 1fr; min-width: 84px; }
+.iters > i { height: 4px; border-radius: 1px; background: var(--surface-sunk); }
+.iters > i.done { background: var(--ok); }
+.iters > i.now  { background: var(--accent); box-shadow: var(--glow-meter); }
+
+/* ------------------------------------------------------------- sequences
+   The one place this interface is allowed to be loud.
+
+   A peptide sequence is what the tool produces, and whether a design carries
+   a non-canonical residue is the question the whole NCAA pass exists to
+   answer. The three-letter code carries that on its own, so this works
+   without colour; the colour is what makes it work at a glance. */
+
+.seq { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+.res {
+  display: inline-block; padding: 2px 5px; border-radius: 2px;
+  font-family: var(--mono); font-size: 11px; line-height: 1.5;
+  letter-spacing: var(--res-track);
+  background: var(--res-bg); color: var(--res-fg);
+  border: 1px solid transparent;
+}
+/* Side-chain chemistry, scoped to the position-preference logo (.logo) so the
+   Results view's sequence strips keep the plain residue style. Tints rather
+   than solid fills: the block already carries height and weight for frequency,
+   and a saturated fill at six classes would fight both. Written as explicit
+   rgba so the rule does not depend on colour-mix support.
+
+   These are NOT the --series palette. That one is for scatter points, where
+   every pair is on screen at once and separation is the only cue; here the
+   three-letter code is always present and the colour is a second channel, so
+   the classes can be closer together than series colours may be.
+
+   Aromatic is TEAL, not the obvious purple: purple measured dE 0.0 against the
+   D-residue colour -- the same colour -- so a TRP block and a DAL block were
+   indistinguishable. Teal puts the worst pair in the set at dE 16.3 (acidic
+   against non-canonical), which differ in weight as well as hue.
+
+   The colours are TOKENS, not literals, because three of the four themes are
+   light. Bright inks chosen to glow on #060A12 are unreadable on #FFFBF3, and
+   the first version of this used literals and did exactly that. Defaults are
+   the dark values; the light themes override the same names below. */
+:root {
+  --aa-hydro-ink: #FFD166; --aa-hydro-tint: rgba(222, 164, 28, .34);
+  --aa-hydro-edge: rgba(240, 180, 40, .75);
+  --aa-arom-ink: #5FE6F5;  --aa-arom-tint: rgba(26, 180, 200, .34);
+  --aa-arom-edge: rgba(40, 200, 220, .75);
+  --aa-polar-ink: #5FF0B4; --aa-polar-tint: rgba(32, 190, 128, .34);
+  --aa-polar-edge: rgba(40, 210, 145, .75);
+  --aa-basic-ink: #8CC6FF; --aa-basic-tint: rgba(56, 142, 248, .34);
+  --aa-basic-edge: rgba(70, 160, 255, .75);
+  --aa-acid-ink: #FFA3A3;  --aa-acid-tint: rgba(240, 82, 82, .34);
+  --aa-acid-edge: rgba(255, 100, 100, .75);
+  --aa-special-ink: #D2DAE6; --aa-special-tint: rgba(150, 160, 176, .28);
+  --aa-special-edge: rgba(165, 176, 192, .66);
+}
+
+/* Light themes: the hue stays, the ink goes dark and the tint goes pale, so a
+   column reads the same way in every theme. (0,2,0) beats the :root above. */
+:root[data-theme="light"],
+:root[data-theme="warm"],
+:root[data-theme="scientific"] {
+  /* Mustard rather than the amber used in dark, because the LIGHT theme gives
+     non-canonicals an amber-brown (--ncaa-ink #6B4200) and the two measured
+     dE 6.0 -- a TRO would have read as an ordinary hydrophobic residue. This
+     clears it by 15.5 while still being the warm yellow the class expects.
+     Warm and scientific put non-canonicals in magenta and pink, so they have
+     no such clash; one set of light values is still simpler than three. */
+  --aa-hydro-ink: #6F6306;  --aa-hydro-tint: rgba(170, 150, 16, .24);
+  --aa-hydro-edge: rgba(140, 124, 10, .58);
+  --aa-arom-ink: #00636F;   --aa-arom-tint: rgba(26, 180, 200, .24);
+  --aa-arom-edge: rgba(16, 132, 148, .58);
+  --aa-polar-ink: #05603D;  --aa-polar-tint: rgba(32, 190, 128, .24);
+  --aa-polar-edge: rgba(20, 140, 94, .58);
+  --aa-basic-ink: #123F85;  --aa-basic-tint: rgba(56, 142, 248, .22);
+  --aa-basic-edge: rgba(40, 104, 190, .58);
+  --aa-acid-ink: #971919;   --aa-acid-tint: rgba(240, 82, 82, .22);
+  --aa-acid-edge: rgba(190, 60, 60, .58);
+  --aa-special-ink: #414A56; --aa-special-tint: rgba(120, 132, 150, .20);
+  --aa-special-edge: rgba(120, 132, 150, .52);
+}
+
+.logo .res.aa-hydro,   .logo-key .res.aa-hydro
+                      { background: var(--aa-hydro-tint); color: var(--aa-hydro-ink);
+                        border-color: var(--aa-hydro-edge); }
+.logo .res.aa-arom,    .logo-key .res.aa-arom
+                      { background: var(--aa-arom-tint); color: var(--aa-arom-ink);
+                        border-color: var(--aa-arom-edge); }
+.logo .res.aa-polar,   .logo-key .res.aa-polar
+                      { background: var(--aa-polar-tint); color: var(--aa-polar-ink);
+                        border-color: var(--aa-polar-edge); }
+.logo .res.aa-basic,   .logo-key .res.aa-basic
+                      { background: var(--aa-basic-tint); color: var(--aa-basic-ink);
+                        border-color: var(--aa-basic-edge); }
+.logo .res.aa-acid,    .logo-key .res.aa-acid
+                      { background: var(--aa-acid-tint); color: var(--aa-acid-ink);
+                        border-color: var(--aa-acid-edge); }
+.logo .res.aa-special, .logo-key .res.aa-special
+                      { background: var(--aa-special-tint); color: var(--aa-special-ink);
+                        border-color: var(--aa-special-edge); }
+
+/* Non-canonical and D-residue blocks are marked by BORDER STYLE as well as by
+   colour, in the logo only. Six chemistry classes plus two kinds of unusual
+   residue is eight colours competing in one small figure, across four themes
+   whose palettes were not designed together -- the light theme already put its
+   non-canonical amber a measured dE 6.0 from hydrophobic. A dashed edge says
+   "not an ordinary residue" without depending on a hue being free, and it
+   survives a theme nobody has written yet. */
+.logo .res.ncaa, .logo-key .res.ncaa,
+.logo .res.dres, .logo-key .res.dres { border-style: dashed; }
+
+/* The key under the columns. */
+.logo-key {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px;
+  font-size: 10.5px; color: var(--ink-3, var(--ink-2));
+}
+.logo-key > span { display: inline-flex; align-items: center; gap: 5px; }
+.logo-key .res { padding: 1px 4px; opacity: 1; }
+
+.res.ncaa {
+  background: var(--ncaa-tint); color: var(--ncaa-ink);
+  font-weight: var(--res-weight); border-color: var(--ncaa-edge);
+  box-shadow: var(--glow-res);
+}
+.res.dres {
+  background: var(--dres-tint); color: var(--dres-ink);
+  font-weight: var(--res-weight); border-color: var(--dres-edge);
+}
+
+/* results.js marks NCAA design rows with a .chip inside the sequence strip,
+   overriding only font-size and padding inline. Without this it keeps its
+   full tap height and towers over a row of residues. Scoped to .seq so the
+   filter chips above the table are untouched. */
+.seq .chip {
+  min-height: 19px; padding: 0 6px; font-size: 9.5px;
+  font-family: var(--mono); letter-spacing: .1em; border-radius: 3px;
+  background: var(--ncaa-tint); border: 1px solid var(--ncaa-edge);
+  color: var(--ncaa-ink); cursor: default;
+}
+
+/* ---------------------------------------------------------------- console */
+
+.console {
+  background: var(--console); border: 1px solid var(--line); border-radius: var(--radius);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.console-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 14px; border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-rail-dim);
+  font-family: var(--label-font); font-size: var(--label-size);
+  font-weight: var(--label-weight); text-transform: var(--label-case);
+  letter-spacing: var(--label-track);
+}
+.console pre {
+  margin: 0; padding: 12px 14px; max-height: 240px; overflow-y: auto;
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.7;
+  color: var(--console-fg); white-space: pre-wrap; word-break: break-word;
+}
+.live { display: inline-flex; align-items: center; gap: 6px; color: var(--live-fg); font-size: 10px; }
+.live i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: var(--glow-dot); }
+
+/* ---------------------------------------------------------------- viewer */
+
+.viewer { height: 340px; background: var(--console); position: relative; }
+.viewer-small { height: 260px; }
+.viewer-overlay {
+  position: absolute; top: 10px; left: 12px; z-index: 5;
+  background: var(--overlay-bg); color: var(--ink);
+  border: 1px solid var(--overlay-line);
+  padding: 4px 9px; border-radius: 3px;
+  font-size: 11px; font-family: var(--label-font);
+  backdrop-filter: var(--overlay-blur);
+}
+.viewer-legend {
+  position: absolute; bottom: 10px; left: 12px; z-index: 5;
+  display: flex; gap: 10px; font-size: 10px; color: var(--ink-rail-dim);
+  font-family: var(--mono); letter-spacing: .06em;
+}
+.viewer-legend i { display: inline-block; width: 9px; height: 3px; vertical-align: middle; }
+
+/* ---------------------------------------------------------------- misc */
+
+.chart { width: 100%; display: block; }
+.chart-note { margin: 0; font-size: 12px; color: var(--ink-3); line-height: 1.5; }
+
+.legend-row { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center;
+              margin: 0 0 12px; min-height: 18px; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px;
+               font-size: 11.5px; color: var(--ink-2); font-family: var(--label-font); }
+.legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex: none;
+                 box-shadow: inset 0 0 0 1px var(--swatch-ring); }
+
+.alert { padding: 11px 14px; border-radius: var(--radius); font-size: 13px;
+         border: 1px solid transparent; }
+.alert-ok   { background: var(--ok-tint);   color: var(--ok-ink);   border-color: var(--ok); }
+.alert-warn { background: var(--warn-tint); color: var(--warn-ink); border-color: var(--warn); }
+.alert-bad  { background: var(--bad-tint);  color: var(--bad-ink);  border-color: var(--bad); }
+.alert strong { display: block; margin-bottom: 2px; }
+
+dl.props { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 9px 14px; }
+dl.props > div { display: flex; flex-direction: column; gap: 2px; }
+dl.props dt {
+  font-family: var(--label-font); font-size: var(--label-size-xs);
+  font-weight: var(--label-weight); text-transform: var(--label-case);
+  letter-spacing: var(--label-track); color: var(--ink-3);
+}
+dl.props dd { margin: 0; font-family: var(--mono); font-size: 12.5px;
+              font-variant-numeric: tabular-nums; color: var(--ink); }
+
+.spinner {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--accent-tint); border-top-color: var(--accent);
+  animation: spin .8s linear infinite; display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+  * { transition: none !important; }
+}
+
+.empty { padding: 26px 16px; text-align: center; color: var(--ink-3); font-size: 12.5px; }
+
+/* ----------------------------------------------------------- figure rail
+   Thumbnails in the analytics console. The thumbnail IS the live figure,
+   scaled down, not a picture of one — so it must have real height; a Plotly
+   chart in a zero-height box renders nothing and reports no error. */
+
+.fig-thumb {
+  display: block; width: 100%; text-align: left;
+  padding: 7px 8px; min-height: 0; margin-bottom: 5px;
+  background: transparent; border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm); cursor: pointer;
+}
+.fig-thumb:hover { background: var(--hover); border-color: var(--line); }
+.fig-thumb--on {
+  background: var(--accent-tint); border-color: var(--accent);
+}
+.fig-thumb__name {
+  display: block; margin-bottom: 4px;
+  font-family: var(--label-font); font-size: 9.5px;
+  font-weight: var(--label-weight); letter-spacing: var(--label-track);
+  text-transform: var(--label-case); color: var(--ink-3);
+}
+.fig-thumb--on .fig-thumb__name { color: var(--accent-ink); }
+/* The figure is drawn at a fixed design box and then SCALED to fit the slot.
+   It used to be drawn full size and cropped to the top 46px, on the argument
+   that scaling would shrink the axis text to nothing. It does -- but what the
+   crop actually showed was the top margin: gridlines for the 2D charts and,
+   for the 3D scatter and the tree, nothing at all, because their data sits
+   below 46px. A thumbnail answers "which figure is this", and shape answers
+   it; axis text at this size was never going to be read either way.
+
+   The box is 420x150 rather than the slot's own size so Plotly has room for
+   its margins -- at the slot's 176px it would be all margin and no plot. The
+   scale factor is set per slot by console.js, which knows the real width. */
+.fig-thumb__slot {
+  display: block; height: 63px; overflow: hidden; pointer-events: none;
+}
+.fig-thumb__slot > figure {
+  width: 420px; height: 150px; margin: 0;
+  transform: scale(var(--thumb-scale, .42));
+  transform-origin: top left;
+}
+.fig-thumb__slot > figure > .chart { height: 150px; }
+
+/* The focused figure is in #figFocus, so its own thumbnail slot is empty --
+   an empty bordered box beside the chart it is showing reads as a figure that
+   failed to draw. Collapse it: the highlighted name says "this is the one
+   open" without pretending to preview it. Safe to display:none here only
+   because the node is elsewhere; a slot that HOLDS a figure must keep a box
+   or Plotly measures zero (see the note at the responsive rules below). */
+.fig-thumb--on .fig-thumb__slot { display: none; }
+.fig-thumb--on .fig-thumb__name { margin-bottom: 0; }
+.fig-thumb__slot .chart-note,
+.fig-thumb__slot .sr-only { display: none; }
+
+/* The focused figure needs real height or Plotly draws a sliver. */
+/* The focused chart needs an EXPLICIT height, not just a min-height on its
+   container. Thumbnails force .chart to 150px, Plotly redraws at that height
+   and carries it in its own layout, so a figure that has been a thumbnail --
+   which is every figure except the one shown first -- arrived here 150px tall
+   and stayed there. The container's min-height did not help: it sizes the
+   slot, not the chart inside it.
+
+   Sized against the viewport so the figure fills the canvas on a laptop and
+   does not run off the screen on a large monitor; the floor keeps it usable
+   when the window is short. */
+#figFocus { min-height: 320px; }
+#figFocus .chart { width: 100%; height: clamp(360px, 58vh, 620px); }
+
+@media (max-width: 760px) {
+  /* The rail becomes a row of names; thumbnails at this width are illegible
+     and cost more vertical space than the figure they preview. */
+  #figRail { display: flex; flex-wrap: wrap; gap: 5px; }
+  .fig-thumb { width: auto; margin-bottom: 0; }
+  #figExplain { flex-basis: 100%; }
+
+  /* Moved off-screen rather than display:none, and still given a real size.
+     The slot holds the actual figure, not a picture of it, so a slot with no
+     box is a chart Plotly cannot measure: it draws at zero width, reports no
+     error, and is blank when you switch to it. Off-screen keeps it
+     measurable. aria-hidden is not set because the figure is not removed
+     from the page, only parked -- the rail button is what is announced. */
+  .fig-thumb__slot {
+    position: absolute; left: -10000px; top: auto;
+    width: 280px; height: 46px; overflow: hidden;
+  }
+  .fig-thumb { position: relative; }
+}
+
+/* ------------------------------------------------------------ residue picker
+   Moved out of the <style> block that used to sit in index.html, where it
+   came AFTER the stylesheet in document order and silently won every
+   conflict — so themed rules had no effect on this dialog. Keep it here. */
+
+.res-modal { position: fixed; inset: 0; z-index: 60;
+             display: flex; align-items: center; justify-content: center; }
+.res-modal[hidden] { display: none; }
+.res-modal__backdrop { position: absolute; inset: 0; background: var(--backdrop); }
+.res-modal__panel {
+  position: relative; display: flex; flex-direction: column;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  width: min(760px, calc(100vw - 32px)); max-height: min(82vh, 780px);
+  box-shadow: var(--panel-shadow);
+}
+.res-modal__head, .res-modal__foot { display: flex; gap: 8px; align-items: center; padding: 13px 16px; }
+.res-modal__head { align-items: flex-start; border-bottom: 1px solid var(--line-soft); }
+.res-modal__foot { border-top: 1px solid var(--line-soft); }
+.res-modal__tools {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 16px; border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-sunk);
+}
+.res-modal__tools input[type="search"] { width: 100%; }
+.res-modal__tools label { color: var(--ink-2); }
+.res-modal__body { flex: 1; overflow-y: auto; padding: 4px 16px 14px; }
+
+.res-section + .res-section { margin-top: 18px; }
+.res-section__head {
+  display: flex; align-items: center; gap: 10px; padding: 8px 0 4px;
+  position: sticky; top: 0; z-index: 1; background: var(--surface);
+}
+.res-section__title {
+  font-family: var(--title-font); font-size: var(--title-size);
+  font-weight: var(--title-weight); text-transform: var(--title-case);
+  letter-spacing: var(--title-track); color: var(--title-fg);
+}
+.res-section__acts { margin-left: auto; }
+
+/* Two columns where there is room: 195 rows in single file is a long scroll. */
+.res-grid { display: grid; gap: 1px 20px;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.res-row { display: flex; align-items: flex-start; gap: 7px;
+           padding: 3px; border-radius: var(--radius-sm);
+           font-size: 12.5px; color: var(--ink); cursor: pointer; }
+.res-row[hidden] { display: none; }
+.res-row:hover { background: var(--hover); }
+.res-row--locked { cursor: default; opacity: .6; }
+.res-row .res { flex: none; }
+.res-row__name { opacity: .8; }
+
+@media (max-width: 760px) {
+  .main { padding: 16px; }
+  .rail { flex-basis: 100%; border-right: none; border-bottom: 1px solid var(--line); }
+  .rail-nav { flex-direction: row; flex-wrap: wrap; }
+  /* The node name and version go, as they did before — they are reference,
+     not controls. The theme picker STAYS: it is the only way to change
+     theme, so hiding the whole foot here left a narrow screen stuck on
+     whatever was chosen last on a desktop. */
+  .rail-foot .row, .rail-foot .ver { display: none; }
+  .rail-foot { margin-top: 0; }
+  .theme-pick { border-top: none; padding-top: 0; }
+  .theme-pick__row { max-width: 260px; }
+}
+
+/* A residue whose mirror is selected. One hand per molecule: a mirrored
+   non-canonical shares its L parent's three-letter code in the output PDB,
+   so allowing both would make the two indistinguishable downstream. */
+.res-row--blocked            { opacity: .45; }
+.res-row--blocked .res       { text-decoration: line-through; }
+.res-row--blocked:hover      { cursor: not-allowed; }
+
+/* Numeric headings over numeric columns. `.num` (line ~740) sets
+   text-align:right and is used on both the th and the td, but
+   `table.data th` is one class plus two elements against `.num`'s single
+   class, so it won and the headings sat left of their own numbers.
+   Specificity, not order: moving .num later would not have fixed it. */
+table.data th.num { text-align: right; }

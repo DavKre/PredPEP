@@ -501,7 +501,9 @@ def seqmap(df_final, cap=1200, dims=3):
     total = total or 1.0
     explained = float(pos_vals.sum() / total)
 
-    out['method'] = f'classical MDS on MHFP Jaccard ({backend})'
+    # The backend string names the fingerprint, so the panel reports what
+    # actually ran rather than a hardcoded name that can drift.
+    out['method'] = f'classical MDS on {backend} Jaccard'
     out['explained'] = round(explained, 3)
     out['points'] = [
         {'x': round(float(coords[i, 0]), 4),

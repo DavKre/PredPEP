@@ -122,6 +122,23 @@ RUN /home/${USER_NAME}/miniforge3/envs/predPEP/bin/python -c \
               gevent, gunicorn, werkzeug, matplotlib.pyplot, mpl_toolkits.mplot3d; \
        print('OK: every live dependency imports.')"
 
+# MAP4C (chiral MinHashed Atom-Pair, Orsi et al.) backs the similarity views.
+# The ONLY package added on top of the environment lifted from the dev's image,
+# pinned so a rebuild cannot silently move it. It needs nothing but rdkit and
+# numpy, both already present, so pip resolves no transitive dependencies.
+#
+# Asserted immediately: tmap_utils falls back to MHFP when the import fails, so
+# a broken install would not raise -- it would quietly change every similarity
+# map in the UI back to the old fingerprint, with only the backend string in a
+# panel note to say so.
+RUN /home/${USER_NAME}/miniforge3/envs/predPEP/bin/pip install --no-cache-dir \
+      mapchiral==0.0.7 \
+ && /home/${USER_NAME}/miniforge3/envs/predPEP/bin/python -c \
+      "from mapchiral.mapchiral import encode; from rdkit import Chem; \
+       fp = encode(Chem.MolFromSequence('AAA'), max_radius=2, n_permutations=1024, seed=42); \
+       assert len(fp) == 1024, len(fp); \
+       print('OK: MAP4C encodes (vector length %d).' % len(fp))"
+
 # ---- 4. Pipeline scripts + /usr/local/bin symlinks --------------------------
 # Every pipeline script is linked by bare name, which is how PREDPEP_MANAGER can
 # default to /usr/local/bin/run_iteMAN.py and how run_iteMAN.py finds

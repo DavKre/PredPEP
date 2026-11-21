@@ -41,6 +41,7 @@ observed, and the distinct-fingerprint count is logged because a tree over
 short peptides can be built and still be meaningless.
 """
 
+import os
 import struct
 from hashlib import sha1
 
@@ -98,13 +99,37 @@ class _PythonMinHash:
         return values
 
 
+try:                                   # MAP4C: chiral MinHashed Atom-Pair, Orsi et al.
+    from mapchiral.mapchiral import encode as _map4c_encode
+except Exception:                      # pragma: no cover - absent on an old image
+    _map4c_encode = None
+
+
+# Which fingerprint the similarity views are built on. Both are minhash
+# signatures of the same length, compared by position-wise agreement, so the
+# distance code and the MDS do not care which one produced them.
+#
+# MAP4C is atom-pair based and chirality-aware; MHFP is substructure (SMILES
+# shingle) based. Measured on a real 640-design job of 4-residue peptides, MHFP
+# reduced better: 42% of the distance structure in three axes against 34%, at
+# half the time. That is not the same as being more informative -- a finer
+# fingerprint can produce distances that genuinely do not fit in three
+# dimensions -- so the choice is left switchable rather than argued about.
+FINGERPRINT = os.environ.get('PREDPEP_FINGERPRINT', 'map4c').strip().lower()
+
+
 def _make_encoder():
     """(encode_fn, backend_name). encode_fn(mol) -> list[int] or raises."""
+    if FINGERPRINT in ('map4c', 'map4') and _map4c_encode is not None:
+        return ((lambda mol: list(_map4c_encode(mol, max_radius=2,
+                                                n_permutations=PERMUTATIONS,
+                                                seed=SEED))),
+                'MAP4C (mapchiral)')
     if _RDKIT_MHFP is not None:
         enc = _RDKIT_MHFP.MHFPEncoder(PERMUTATIONS, SEED)
-        return (lambda mol: list(enc.EncodeMol(mol))), 'rdkit.rdMHFPFingerprint'
+        return (lambda mol: list(enc.EncodeMol(mol))), 'MHFP (rdkit.rdMHFPFingerprint)'
     py = _PythonMinHash()
-    return py.encode_mol, 'mhfp (python-int minhash)'
+    return py.encode_mol, 'MHFP (python-int minhash)'
 
 
 def generate_tmap_coordinates(sequences):

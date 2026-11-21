@@ -5,7 +5,22 @@ scheduled; anything still being argued about belongs in a design note instead.
 
 ---
 
-## Replace the TMAP fingerprint in the UI with MAP4 / MAP4C
+## ~~Replace the TMAP fingerprint in the UI with MAP4 / MAP4C~~ — DONE 21 Nov 2026
+
+Implemented as MAP4C (`mapchiral==0.0.7`, Orsi et al.), default on, with
+`PREDPEP_FINGERPRINT=mhfp` to switch back without a rebuild. **One claim below
+turned out to be wrong and is corrected here:** RDKit's MHFP is *not* blind to
+chirality — its shingles are SMILES substrings, so stereo markers are in them.
+Measured on L-AAA against its D variant, MHFP put them at distance 0.571 and
+MAP4C at 0.131. And on a real 640-design job MHFP reduced *better*: 42% of the
+distance structure in three axes against MAP4C's 34%, at half the runtime.
+Lower is not automatically worse — a finer fingerprint can produce distances
+that genuinely do not fit in three dimensions — but it is not the improvement
+this entry assumed, which is why the switch exists. Worth re-measuring on a
+job with long peptides; everything here was 4-mers.
+
+<details><summary>original entry</summary>
+
 
 **What:** the similarity view currently fingerprints peptides with **MHFP**.
 Replace it with **MAP4**, or **MAP4C** if chirality is wanted.
@@ -54,3 +69,4 @@ them, the chirality-aware variant is the one to take.
   describing the old one.
 - Old jobs are unaffected: the fingerprint is computed at view time from
   `tab2_final_scores.csv`, not stored, so nothing needs migrating.
+</details>

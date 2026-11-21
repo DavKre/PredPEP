@@ -307,11 +307,11 @@ def _write_foldx_only(df_foldx, output_file, spec):
     print("⚠️ Building a FoldX-only score table (Rosetta scores unavailable).")
     sequences, pdb_paths = _scan_job_tree('.')
 
-    df = df_foldx[['pdbId', 'FoldX_Score']].copy()
+    df = df_foldx[['pdbId', 'ddG_Score']].copy()
     df['pepSeq'] = df['pdbId'].map(lambda p: sequences.get(_design_base(p), ''))
     df['pdb_relative_path'] = df['pdbId'].map(lambda p: pdb_paths.get(str(p), ''))
-    df['Rosetta_Total_Score'] = pd.NA          # -> empty cell in the CSV
-    df['rosetta_available'] = False
+    df['Total_Energy'] = pd.NA          # -> empty cell in the CSV
+    df['energy_available'] = False
 
     # The filters need pepResidues / disulfide_intact, which only run_catSPEC.py
     # produces. In this degraded path they are absent, so apply_post_filters
@@ -319,8 +319,8 @@ def _write_foldx_only(df_foldx, output_file, spec):
     df, report = apply_post_filters(df, spec)
     report['degraded'] = True
 
-    cols = ['pdbId', 'pepSeq', 'pdb_relative_path', 'FoldX_Score',
-            'Rosetta_Total_Score', 'rosetta_available',
+    cols = ['pdbId', 'pepSeq', 'pdb_relative_path', 'ddG_Score',
+            'Total_Energy', 'energy_available',
             'disulfide_ok', 'native_ok', 'passes_filters']
     df = df[[c for c in cols if c in df.columns]]
     df.to_csv(output_file, index=False)
@@ -373,7 +373,7 @@ def merge_and_clean_scores(foldx_file, rosetta_file, output_file):
         return None
 
     print(f"📂 Loading FoldX scores from {foldx_file}...")
-    df_foldx = pd.read_csv(foldx_file, sep=r'\s+', header=None, names=['pdbId', 'FoldX_Score'], usecols=[0, 1])
+    df_foldx = pd.read_csv(foldx_file, sep=r'\s+', header=None, names=['pdbId', 'ddG_Score'], usecols=[0, 1])
 
     # 2. Load Rosetta Data (includes pepSeq and pdb_relative_path)
     # If it is missing the aggregation step failed, but the FoldX ranking above is
@@ -453,22 +453,22 @@ def merge_and_clean_scores(foldx_file, rosetta_file, output_file):
         print(f"   · ignoring {len(dropped_numeric)} numeric artifact column(s)")
 
     final_cols = (['pdbId', 'pepSeq', 'pepResidues', 'pdb_relative_path',
-                   'FoldX_Score', 'total_score', 'disulfide_intact']
+                   'ddG_Score', 'total_score', 'disulfide_intact']
                   + present_terms)
 
     cols_to_select = [col for col in final_cols if col in df_merged.columns]
     df_final = df_merged[cols_to_select].copy()
 
     # Rename columns to match the table headers expected by tab2_results_table.js
-    df_final = df_final.rename(columns={'total_score': 'Rosetta_Total_Score'})
+    df_final = df_final.rename(columns={'total_score': 'Total_Energy'})
 
     # Per-row provenance flag: a left join leaves unmatched designs without a Rosetta
     # score, and those cells stay empty rather than being filled with a placeholder.
-    if 'Rosetta_Total_Score' in df_final.columns:
-        df_final['rosetta_available'] = df_final['Rosetta_Total_Score'].notna()
+    if 'Total_Energy' in df_final.columns:
+        df_final['energy_available'] = df_final['Total_Energy'].notna()
     else:
-        df_final['Rosetta_Total_Score'] = pd.NA
-        df_final['rosetta_available'] = False
+        df_final['Total_Energy'] = pd.NA
+        df_final['energy_available'] = False
 
     # 5b. Post-run filters: evaluated and recorded, never silently dropped.
     df_final, report = apply_post_filters(df_final, spec)
@@ -500,8 +500,8 @@ def merge_and_clean_scores(foldx_file, rosetta_file, output_file):
 
         # Sort by FoldX_Score (lowest is best). Rosetta ranking left commented
         # out as in the original.
-        # df_top10 = pool.sort_values(by='Rosetta_Total_Score').head(10)
-        df_top10 = pool.sort_values(by='FoldX_Score').head(10)
+        # df_top10 = pool.sort_values(by='Total_Energy').head(10)
+        df_top10 = pool.sort_values(by='ddG_Score').head(10)
 
         print(f"📂 Copying top 10 models to {top10_dir}...")
         for idx, row in df_top10.iterrows():

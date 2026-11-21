@@ -71,8 +71,8 @@ COLS = (['pdbId', 'parent', 'parentResidues', 'pepResidues',
          'delta_dG_vs_control', 'delta_dG_vs_parent',
          'control_dG_separated', 'parent_dG_separated']
         + list(IFACE_COLUMNS)
-        + ['Rosetta_Total_Score', 'FoldX_Score', 'foldx_valid',
-           'foldx_unknown', 'pdb_relative_path'])
+        + ['Total_Energy', 'ddG_Score', 'ddG_valid',
+           'ddG_unknown', 'pdb_relative_path'])
 
 OUT_CSV = 'tab3_ncaa_designs.csv'
 OUT_REPORT = 'ncaa_design_report.json'
@@ -226,10 +226,10 @@ def collect(job_dir):
                 'control_dG_separated': ('' if control_dg is None
                                          else round(control_dg, 3)),
                 'parent_dG_separated': '',
-                'Rosetta_Total_Score': row.get('total_score', ''),
-                'FoldX_Score': '',
-                'foldx_valid': '',
-                'foldx_unknown': '',
+                'Total_Energy': row.get('total_score', ''),
+                'ddG_Score': '',
+                'ddG_valid': '',
+                'ddG_unknown': '',
                 'pdb_relative_path': os.path.join(DESIGN_DIR, model, name),
             }
             for col in IFACE_COLUMNS:
@@ -245,7 +245,7 @@ def collect(job_dir):
         except (TypeError, ValueError, KeyError):
             pass
         try:
-            return (1, float(r['Rosetta_Total_Score']))
+            return (1, float(r['Total_Energy']))
         except (TypeError, ValueError, KeyError):
             pass
         return (2, 0.0)

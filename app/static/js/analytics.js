@@ -113,7 +113,7 @@ function renderColourControl() {
   sel.disabled = false;
   // Grouped with optgroups: with Rosetta terms, composition descriptors and one
   // entry per peptide position, a flat list of forty-odd options is unusable.
-  const order = ['Scores', 'Rosetta terms', 'Similarity', 'Composition',
+  const order = ['Scores', 'Energy terms', 'Similarity', 'Composition',
                  'RDKit descriptors', 'Run', 'By position'];
   const groups = new Map();
   for (const f of state.fields) {
@@ -294,7 +294,7 @@ function concAgreement() {
   const total = state.data.design_count;
   let out = `The two scores agree at r = ${fx(fit.r, 2)} over ${n} design(s).`;
   if (typeof total === 'number' && total > n) {
-    out += ` ${total - n} of ${total} are absent: a design FoldX could not `
+    out += ` ${total - n} of ${total} are absent: a design the ΔΔG scorer could not `
          + `score has no point here at all, rather than appearing as an outlier.`;
   }
   return out;
@@ -416,7 +416,7 @@ function buildStrip() {
       sub: d.noncanonical_count != null ? d.noncanonical_count + ' non-canonical' : '' },
     { label: 'Best ΔΔG', value: fx(bestNow, 2),
       sub: it.length ? 'iteration ' + it[it.length - 1].iteration : '' },
-    { label: 'FoldX ↔ Rosetta', value: fit ? 'r ' + fx(fit.r, 2) : null,
+    { label: 'ΔΔG ↔ total energy', value: fit ? 'r ' + fx(fit.r, 2) : null,
       sub: fit ? d.agreement.points.length + ' scored' : 'not comparable' },
     { label: 'PC1–PC2', value: pcv != null ? pcv.toFixed(0) + '%' : null,
       sub: 'of score variance' },
@@ -466,7 +466,7 @@ function drawEvolution(data) {
       { name: 'median', x: it.map(r => 'it' + r.iteration), y: it.map(r => r.median),
         dash: 'dash', colour: cssVar('--series-3', '#9AA3AD') },
     ],
-    xTitle: 'iteration', yTitle: 'FoldX ΔΔG (kcal/mol)',
+    xTitle: 'iteration', yTitle: 'ΔΔG (kcal/mol)',
     filename: 'evolution',
   });
   const first = it[0], last = it[it.length - 1];
@@ -479,17 +479,17 @@ function drawEvolution(data) {
 
 function drawAgreement(data) {
   if (!data || !data.points || data.points.length < 2) {
-    placeholder('chartAgreement', 'Needs both FoldX and Rosetta scores.');
-    note('noteAgreement', 'A partial run with no Rosetta aggregation cannot be compared.');
+    placeholder('chartAgreement', 'Needs both ΔΔG and energy scores.');
+    note('noteAgreement', 'A partial run with no energy aggregation cannot be compared.');
     return;
   }
   const pts = data.points;
   const fit = linearFit(pts);
   renderScatter('chartAgreement', {
     x: pts.map(p => p.x), y: pts.map(p => p.y),
-    rows: pts.map(p => ({ pdbId: p.id || '', FoldX_Score: p.x, Rosetta_Total_Score: p.y })),
-    xTitle: 'FoldX ΔΔG (kcal/mol)', yTitle: 'Rosetta total',
-    fit, filename: 'foldx-vs-rosetta',
+    rows: pts.map(p => ({ pdbId: p.id || '', ddG_Score: p.x, Total_Energy: p.y })),
+    xTitle: 'ΔΔG (kcal/mol)', yTitle: 'Total energy',
+    fit, filename: 'ddg-vs-energy',
     onPick: id => state.onOpenDesign && state.onOpenDesign(id),
   });
   const label = document.getElementById('corrLabel');
@@ -556,7 +556,7 @@ function drawPca3d(data) {
     label.textContent = 'PC1–PC3'
       + (data.variance3 ? ' · ' + Math.round(data.variance3 * 100) + '% variance explained' : '');
   }
-  note('notePca3d', 'Score space: position is set by the Rosetta energy terms. '
+  note('notePca3d', 'Score space: position is set by the energy terms. '
     + 'Drag to rotate, scroll to zoom, click a point to open that design.');
 }
 

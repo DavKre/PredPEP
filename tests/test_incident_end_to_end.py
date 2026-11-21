@@ -137,7 +137,7 @@ def test_total_aggregation_failure_still_yields_a_usable_table(incident_job):
     with open(os.path.join(job_dir, 'tab2_final_scores.csv')) as fh:
         table = list(csv.DictReader(fh))
     assert len(table) == N_DESIGNS
-    assert all(r['rosetta_available'] == 'False' for r in table), \
+    assert all(r['energy_available'] == 'False' for r in table), \
         "degradation must be marked in-band"
 
     status, stage, message = _finish(job_id, job_dir, cat.returncode, merge.returncode)

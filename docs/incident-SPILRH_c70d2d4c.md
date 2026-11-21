@@ -1,4 +1,8 @@
 # Incident: a 14-hour job produced no final scores and reported success
+> **Note (Nov 2026):** the score columns named below were renamed after this
+> incident — `Rosetta_Total_Score` → `Total_Energy`, `FoldX_Score` → `ddG_Score`,
+> `rosetta_available` → `energy_available`. Readers accept both; this record is
+> left in the names it was written with.
 
 **Job** `SPILRH_c70d2d4c` · protein `ILRH_113` · 15 CPUs · peptide length 30
 **Node** internal compute node · **2026-08-03 11:43 → 2026-08-04 01:32 UTC (~13.8 h)**

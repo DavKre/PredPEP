@@ -562,9 +562,19 @@ def pick_models(job_dir, top, chain):
         # No score table: a job that failed before aggregation. Fall through to
         # the iteration directories below rather than giving up here.
         rows = []
-    rows = [r for r in rows if (r.get('FoldX_Score') or '').strip()]
+    # Score columns were renamed to name the quantity rather than the engine.
+    # A job aggregated by an older build still has the old headers, and this
+    # pass can be re-run by hand over any archived job directory, so accept
+    # either. Falling through silently to the iteration dirs would quietly
+    # design on the wrong models.
+    for r in rows:
+        if 'ddG_Score' not in r and 'FoldX_Score' in r:
+            r['ddG_Score'] = r['FoldX_Score']
+        if 'Total_Energy' not in r and 'Rosetta_Total_Score' in r:
+            r['Total_Energy'] = r['Rosetta_Total_Score']
+    rows = [r for r in rows if (r.get('ddG_Score') or '').strip()]
     try:
-        rows.sort(key=lambda r: float(r['FoldX_Score']))
+        rows.sort(key=lambda r: float(r['ddG_Score']))
     except (KeyError, ValueError):
         pass
     for r in rows[:top]:
@@ -903,8 +913,8 @@ def main():
                 'pepResidues': ' '.join(res),
                 'n_noncanonical': len(ncaa),
                 'noncanonical': ' '.join(sorted(set(ncaa))),
-                'Rosetta_Total_Score': row.get('total_score', ''),
-                'FoldX_Score': '',
+                'Total_Energy': row.get('total_score', ''),
+                'ddG_Score': '',
                 'pdb_relative_path': os.path.relpath(out_pdb,
                                                      os.path.dirname(job_dir)),
             }
@@ -987,17 +997,17 @@ def main():
                     # -- computed over the residues it recognised, with these
                     # silently dropped -- and that number would be worse than
                     # no number, because it reads as a valid DDG.
-                    row['foldx_valid'] = False
-                    row['foldx_unknown'] = ' '.join(unknown)
+                    row['ddG_valid'] = False
+                    row['ddG_unknown'] = ' '.join(unknown)
                     fx_skipped += 1
                     continue
                 p = os.path.join(os.path.dirname(job_dir),
                                  row['pdb_relative_path'])
                 v = foldx_total(p, fx_dir)
-                row['foldx_valid'] = True
-                row['foldx_unknown'] = ''
+                row['ddG_valid'] = True
+                row['ddG_unknown'] = ''
                 if v is not None:
-                    row['FoldX_Score'] = round(v, 3)
+                    row['ddG_Score'] = round(v, 3)
             shutil.rmtree(fx_dir, ignore_errors=True)
 
     # Rank on dG_separated: it is the only metric present for EVERY design,
@@ -1017,7 +1027,7 @@ def main():
         except (TypeError, ValueError, KeyError):
             pass
         try:
-            return (1, float(r['Rosetta_Total_Score']))
+            return (1, float(r['Total_Energy']))
         except (TypeError, ValueError, KeyError):
             pass
         return (2, 0.0)
@@ -1040,8 +1050,8 @@ def main():
              'delta_dG_vs_control', 'delta_dG_vs_parent',
              'control_dG_separated', 'parent_dG_separated']
             + list(IFACE_COLUMNS)
-            + ['Rosetta_Total_Score', 'FoldX_Score', 'foldx_valid',
-               'foldx_unknown', 'pdb_relative_path'])
+            + ['Total_Energy', 'ddG_Score', 'ddG_valid',
+               'ddG_unknown', 'pdb_relative_path'])
     out_csv = os.path.join(job_dir, OUT_CSV)
     with open(out_csv, 'w', newline='') as f:
         w = csv.DictWriter(f, fieldnames=cols)

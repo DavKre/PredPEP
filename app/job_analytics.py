@@ -139,6 +139,28 @@ def _residues(row):
     return [(ch, 'ncaa' if ch == 'X' else '') for ch in seq if ch.isalpha()]
 
 
+# Score columns were renamed to say what the number IS rather than which engine
+# produced it (Total_Energy, ddG_Score). Every result CSV written before that
+# carries the old headers and must keep rendering, so readers accept either and
+# normalise on the way in. Writers only ever emit the new names.
+LEGACY_SCORE_COLUMNS = {
+    'Rosetta_Total_Score': 'Total_Energy',
+    'rosetta_available':   'energy_available',
+    'FoldX_Score':         'ddG_Score',
+    'foldx_valid':         'ddG_valid',
+    'foldx_unknown':       'ddG_unknown',
+}
+
+
+def normalise_score_columns(df):
+    """Rename legacy score headers in place. A table that already uses the new
+    name keeps it: if both are somehow present the new one wins, because that is
+    the one every reader downstream expects."""
+    rename = {old: new for old, new in LEGACY_SCORE_COLUMNS.items()
+              if old in df.columns and new not in df.columns}
+    return df.rename(columns=rename) if rename else df
+
+
 def _load_final(job_dir):
     path = os.path.join(job_dir, FINAL_SCORES)
     if not os.path.exists(path):
@@ -147,10 +169,11 @@ def _load_final(job_dir):
         df = pd.read_csv(path)
     except Exception:
         return None
-    if 'FoldX_Score' in df.columns:
-        df['FoldX_Score'] = pd.to_numeric(df['FoldX_Score'], errors='coerce')
-    if 'Rosetta_Total_Score' in df.columns:
-        df['Rosetta_Total_Score'] = pd.to_numeric(df['Rosetta_Total_Score'], errors='coerce')
+    df = normalise_score_columns(df)
+    if 'ddG_Score' in df.columns:
+        df['ddG_Score'] = pd.to_numeric(df['ddG_Score'], errors='coerce')
+    if 'Total_Energy' in df.columns:
+        df['Total_Energy'] = pd.to_numeric(df['Total_Energy'], errors='coerce')
     if 'pdb_relative_path' in df.columns:
         df['iteration'] = df['pdb_relative_path'].map(_iteration_of)
     else:
@@ -163,7 +186,7 @@ def _load_all_scores(job_dir):
     if not os.path.exists(path):
         return None
     try:
-        return pd.read_csv(path)
+        return normalise_score_columns(pd.read_csv(path))
     except Exception:
         return None
 
@@ -187,10 +210,10 @@ def evolution(job_dir, df_final):
         if rows:
             return {'iterations': rows, 'source': METRICS_FILE}
 
-    if df_final is None or 'FoldX_Score' not in df_final.columns:
+    if df_final is None or 'ddG_Score' not in df_final.columns:
         return {'iterations': [], 'source': None}
 
-    df = df_final.dropna(subset=['FoldX_Score'])
+    df = df_final.dropna(subset=['ddG_Score'])
     df = df[df['iteration'].notna()]
     if df.empty:
         return {'iterations': [], 'source': None}
@@ -198,13 +221,13 @@ def evolution(job_dir, df_final):
     rows = []
     running = None
     for it, group in df.groupby('iteration', sort=True):
-        best = float(group['FoldX_Score'].min())
+        best = float(group['ddG_Score'].min())
         running = best if running is None else min(running, best)
         rows.append({
             'iteration': int(it),
             'best': round(running, 3),          # running minimum = convergence
             'iteration_best': round(best, 3),   # best found in this iteration alone
-            'median': round(float(group['FoldX_Score'].median()), 3),
+            'median': round(float(group['ddG_Score'].median()), 3),
             'count': int(len(group)),
         })
     return {'iterations': rows, 'source': FINAL_SCORES}
@@ -216,11 +239,11 @@ def agreement(df_final, cap=1500):
     """FoldX against Rosetta total, one point per design."""
     if df_final is None:
         return {'points': []}
-    cols = {'FoldX_Score', 'Rosetta_Total_Score'}
+    cols = {'ddG_Score', 'Total_Energy'}
     if not cols.issubset(df_final.columns):
         return {'points': []}
 
-    df = df_final.dropna(subset=['FoldX_Score', 'Rosetta_Total_Score'])
+    df = df_final.dropna(subset=['ddG_Score', 'Total_Energy'])
     if df.empty:
         return {'points': []}
 
@@ -233,8 +256,8 @@ def agreement(df_final, cap=1500):
     for _, row in df.iterrows():
         kinds = [k for _, k in _residues(row)]
         points.append({
-            'x': round(float(row['FoldX_Score']), 3),
-            'y': round(float(row['Rosetta_Total_Score']), 2),
+            'x': round(float(row['ddG_Score']), 3),
+            'y': round(float(row['Total_Energy']), 2),
             'flag': any(kinds),
         })
     return {'points': points, 'sampled': len(df) < len(df_final)}
@@ -387,10 +410,10 @@ def seqmap(df_final, cap=1200, dims=3):
         return out
 
     df = df_final
-    if 'FoldX_Score' in df.columns and len(df) > cap:
+    if 'ddG_Score' in df.columns and len(df) > cap:
         # Keep the best-scoring designs rather than a random slice: the map is
         # read to find structure among candidates worth looking at.
-        df = df.nsmallest(cap, 'FoldX_Score')
+        df = df.nsmallest(cap, 'ddG_Score')
     elif len(df) > cap:
         df = df.head(cap)
 
@@ -638,10 +661,10 @@ def logo(df_final, top=100, max_stack=3):
     Three-letter codes throughout: a one-letter logo cannot distinguish the
     non-canonicals, which all render as X.
     """
-    if df_final is None or 'FoldX_Score' not in df_final.columns:
+    if df_final is None or 'ddG_Score' not in df_final.columns:
         return {'columns': []}
 
-    df = df_final.dropna(subset=['FoldX_Score']).nsmallest(top, 'FoldX_Score')
+    df = df_final.dropna(subset=['ddG_Score']).nsmallest(top, 'ddG_Score')
     if df.empty:
         return {'columns': []}
 
@@ -815,8 +838,8 @@ def best_score(job_dir):
         return round(float(live['global_best']), 3)
 
     df = _load_final(job_dir)
-    if df is not None and 'FoldX_Score' in df.columns:
-        series = df['FoldX_Score'].dropna()
+    if df is not None and 'ddG_Score' in df.columns:
+        series = df['ddG_Score'].dropna()
         if not series.empty:
             return round(float(series.min()), 3)
 

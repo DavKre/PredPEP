@@ -15,7 +15,7 @@ import pytest
 import conftest  # noqa: F401  (path setup)
 
 
-ROSETTA_COL = 'Rosetta_Total_Score'
+ROSETTA_COL = 'Total_Energy'
 
 
 @pytest.fixture
@@ -82,7 +82,7 @@ def test_degradation_is_marked_in_band(foldx_only_job):
         '%s.all.txt' % base, 'non_mc_pdbs.csv', 'tab2_final_scores.csv')
 
     rows = _read_rows(os.path.join(job_dir, 'tab2_final_scores.csv'))
-    assert all(r['rosetta_available'] == 'False' for r in rows)
+    assert all(r['energy_available'] == 'False' for r in rows)
 
 
 def test_sequences_are_recovered_from_fasta(foldx_only_job):
@@ -118,7 +118,7 @@ def test_full_merge_still_marks_rosetta_available(job_tree, run_in):
 
     rows = _read_rows(os.path.join(job_dir, 'tab2_final_scores.csv'))
     assert rows[0][ROSETTA_COL] == '-435.7'
-    assert rows[0]['rosetta_available'] == 'True'
+    assert rows[0]['energy_available'] == 'True'
 
 
 def test_no_table_when_foldx_also_missing(job_tree, run_in):

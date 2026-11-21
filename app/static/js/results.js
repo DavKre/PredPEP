@@ -52,7 +52,7 @@ const COLUMNS = [
   { key: 'residues',    label: 'Sequence',      cls: '',      sortable: false },
   { key: 'iteration',   label: 'It.',           cls: 'mono',  sortable: true },
   { key: 'foldx',       label: 'FoldX ΔΔG',     cls: 'num',   sortable: true },
-  { key: 'rosetta',     label: 'Rosetta total', cls: 'num',   sortable: true },
+  { key: 'rosetta',     label: 'Total energy', cls: 'num',   sortable: true },
   { key: 'interface',   label: 'Interface',     cls: 'num',   sortable: true },
   // Its OWN column, not folded into Interface. dG_separated comes from
   // InterfaceAnalyzerMover in the NCAA design pass; Interface comes from
@@ -202,9 +202,13 @@ function normalise(raw) {
       residues,
       seqText: residues.map(x => x.code).join(' '),
       iteration: iterationOf(r),
-      foldx: parseFloat(r.FoldX_Score),
-      rosetta: r.rosetta_available === 'False' || r.Rosetta_Total_Score === ''
-        ? NaN : parseFloat(r.Rosetta_Total_Score),
+      // Score columns name the quantity now (ddG_Score, Total_Energy). Jobs
+      // aggregated by an older build still carry the engine-named headers and
+      // must keep rendering, so read either.
+      foldx: parseFloat(r.ddG_Score ?? r.FoldX_Score),
+      rosetta: (r.energy_available ?? r.rosetta_available) === 'False'
+        || (r.Total_Energy ?? r.Rosetta_Total_Score) === ''
+        ? NaN : parseFloat(r.Total_Energy ?? r.Rosetta_Total_Score),
       interface: parseFloat(r.interface_score ?? r.Interface_Score ?? NaN),
       binding: parseFloat(r.binding_score ?? NaN),
       // Rows from tab3_ncaa_designs.csv, tagged by the server. Absent on every
@@ -371,7 +375,7 @@ function renderTable() {
     const badge = r.source === 'ncaa_design'
       ? '<span class="chip" style="font-size:10px;padding:0 5px;margin-right:6px"' +
         ' title="From the rosetta_scripts NCAA design pass, run after the' +
-        ' iterations. Ranked on \u0394G sep, not FoldX.">NCAA</span>'
+        ' iterations. Ranked on \u0394G sep, not \u0394\u0394G.">NCAA</span>'
       : '';
     return `<tr class="pick" data-path="${esc(r.path)}" aria-selected="${sel}">
       <td class="mono muted">${start + i + 1}</td>
@@ -409,7 +413,7 @@ function renderDetail() {
     <div class="seq" style="margin-bottom:12px">${chips}</div>
     <dl class="props">
       <div><dt>FoldX ΔΔG</dt><dd><strong>${fmtNum(r.foldx)}</strong></dd></div>
-      <div><dt>Rosetta total</dt><dd>${isFinite(r.rosetta) ? fmtNum(r.rosetta, 1) : '—'}</dd></div>
+      <div><dt>Total energy</dt><dd>${isFinite(r.rosetta) ? fmtNum(r.rosetta, 1) : '—'}</dd></div>
       <div><dt>Interface</dt><dd>${isFinite(r.interface) ? fmtNum(r.interface, 1) : '—'}</dd></div>
       <div><dt>Binding</dt><dd>${isFinite(r.binding) ? fmtNum(r.binding, 1) : '—'}</dd></div>
       ${!isFinite(r.dgsep) ? '' : `
@@ -516,7 +520,7 @@ export async function load(jobId) {
         (iters.length ? ` · iterations ${iters[0]}–${iters[iters.length - 1]}` : '') +
         (state.hasPostFilters
           ? ` · ${nPass} pass the submitted filters` : '') +
-        (noRosetta ? ' · <span style="color:var(--warn-ink)">Rosetta scores missing (partial run)</span>' : '');
+        (noRosetta ? ' · <span style="color:var(--warn-ink)">Energy scores missing (partial run)</span>' : '');
     }
 
     const zip = document.getElementById('downloadZip');
@@ -545,7 +549,7 @@ async function fillJobs() {
 
 function exportCsv() {
   if (!state.view.length) return;
-  const head = ['rank', 'pdbId', 'sequence', 'iteration', 'foldx_ddg', 'rosetta_total', 'interface', 'gravy'];
+  const head = ['rank', 'pdbId', 'sequence', 'iteration', 'ddg', 'total_energy', 'interface', 'gravy'];
   const lines = [head.join(',')].concat(state.view.map((r, i) => [
     i + 1,
     '"' + r.pdbId.replace(/"/g, '""') + '"',

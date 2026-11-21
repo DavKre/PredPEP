@@ -25,7 +25,7 @@ def _foldx(d, base='SPILRH'):
 
 
 def _final_csv(d):
-    (d / 'tab2_final_scores.csv').write_text('pdbId,pepSeq,FoldX_Score\nx.pdb,ACDEF,-40.5\n')
+    (d / 'tab2_final_scores.csv').write_text('pdbId,pepSeq,ddG_Score\nx.pdb,ACDEF,-40.5\n')
 
 
 def _agg_report(d, **kw):

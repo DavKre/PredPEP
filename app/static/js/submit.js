@@ -109,7 +109,7 @@ function renderStrip() {
       `Click a position to anchor it — the anchored residue is the one position ` +
       `held fixed in that run.` +
       (bonds.length ? ` ${bonds.length} cysteine(s) form a disulfide (dashed); ` +
-        'Rosetta keeps them by default but may substitute them when it scores better.' : '');
+        'The design engine keeps them by default but may substitute them when it scores better.' : '');
   }
 }
 
@@ -338,7 +338,7 @@ function renderDisulfideBlock() {
           `The SSBOND record looks inherited from a parent structure — ignoring it.`
         : 'No SSBOND in this template — nothing to handle.';
     } else {
-      const label = { auto: 'left to Rosetta detection',
+      const label = { auto: 'left to engine detection',
                       preserve: 'preserved via -in:fix_disulf',
                       allow_design: 'designable, bond may be lost' }[ssMode()];
       sum.textContent = `Template disulfide ${pairs.join(', ')} (chain B): ${label}.`;

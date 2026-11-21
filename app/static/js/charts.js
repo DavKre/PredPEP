@@ -199,7 +199,7 @@ export function renderHeatmap(host, { labels, matrix, label }) {
 
   const wrap = document.createElement('div');
   wrap.setAttribute('role', 'img');
-  wrap.setAttribute('aria-label', label || 'Correlation matrix of Rosetta score terms');
+  wrap.setAttribute('aria-label', label || 'Correlation matrix of energy terms');
   wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px';
 
   // Diverging: blue positive, amber negative. Magnitude rides on alpha so the

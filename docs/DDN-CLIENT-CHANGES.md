@@ -101,7 +101,7 @@ all placed that way), but not when they are the only choice.
   effects on the group server's jobs ran −1.8 to −3.9, well clear of it.
 - Designs containing residues FoldX has no parameters for come back with **no
   FoldX score** — FoldX drops them silently rather than failing. Rank those on
-  `Rosetta_Total_Score` or `interface_score`. FoldX can score only: END, PHI,
+  `Total_Energy` or `interface_score`. FoldX can score only: END, PHI,
   PSI, PTR, SEP, SME, TPO.
 
 ---

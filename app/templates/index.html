@@ -235,7 +235,7 @@
             </div>
 
             <!-- DESIGN PARAMETERS. Lab preset = the values run_createflag2_2.sh
-                 hardcoded; the Rosetta default is shown alongside each, since several
+                 hardcoded; the engine default is shown alongside each, since several
                  differ substantially (n_build_loop 100 vs 1000). -->
             <details>
               <summary class="small" style="cursor:pointer;font-weight:500;padding:4px 0">
@@ -272,7 +272,7 @@
               </div>
               <div style="display:flex;gap:8px;margin-top:12px">
                 <button type="button" class="btn-sm" id="resetPreset">Reset to lab preset</button>
-                <button type="button" class="btn-sm" id="rosettaDefaults">Use Rosetta defaults</button>
+                <button type="button" class="btn-sm" id="rosettaDefaults">Use engine defaults</button>
               </div>
             </details>
 
@@ -308,7 +308,7 @@
             </details>
 
             <!-- DISULFIDE HANDLING. Unlike the post-run filters below, this one acts
-                 DURING the run: it decides how Rosetta types the bonded cysteines.
+                 DURING the run: it decides how the design engine types the bonded cysteines.
                  The default is "auto", which is what every job before this setting
                  existed did. See the note in run_createflags.py for why the bond
                  holds only intermittently under "auto". -->
@@ -322,7 +322,7 @@
                 <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--ink)">
                   <input type="radio" name="ssMode" value="auto" checked
                          style="width:auto;margin-top:3px">
-                  <span>Leave to Rosetta <span class="muted">(default)</span>
+                  <span>Leave to the design engine <span class="muted">(default)</span>
                     <span class="sub-note">No flag is emitted. The bonded cysteines usually
                       survive because the substitution <em>fails</em> — pepspec logs
                       <code>make_sequence_change failed: new_aa= ALA</code> — not because
@@ -335,7 +335,7 @@
                   <span>Preserve the bond every run
                     <span class="sub-note">Emits <code>-in:fix_disulf</code> with the pair in
                       pose numbering, so the typing is explicit rather than detected.
-                      Cross-check the numbers against Rosetta's own
+                      Cross-check the numbers against the design engine's own
                       <code>Found disulfide between residues X Y</code> log line — they are
                       recorded in <code>flags_manifest.json</code>.</span></span>
                 </label>
@@ -417,7 +417,7 @@
           <select id="iterFilter"><option value="">All</option></select>
         </div>
         <div class="field" style="flex:0 1 160px">
-          <label for="ddgFilter">FoldX ΔΔG ≤</label>
+          <label for="ddgFilter">ΔΔG ≤</label>
           <input type="number" id="ddgFilter" class="mono" step="0.5" placeholder="any">
         </div>
         <div class="field">
@@ -602,7 +602,7 @@
           <p class="chart-note" id="noteEvolution"></p>
         </figure>
 
-        <figure data-fig="agreement" data-name="FoldX v Rosetta" style="margin:0">
+        <figure data-fig="agreement" data-name="ΔΔG v total energy" style="margin:0">
           <div id="chartAgreement" class="chart"></div>
           <p class="chart-note" id="noteAgreement"></p>
         </figure>
@@ -726,16 +726,16 @@
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink)">
         <input type="checkbox" id="residueOnlyRotlib" style="width:auto;margin-top:3px">
         <span>Only residues with a rotamer library
-          <span class="sub-note">Without one, Rosetta builds a single rotamer for
+          <span class="sub-note">Without one, the design engine builds a single rotamer for
             that residue, so the packer cannot explore its side chain.</span></span>
       </label>
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink)">
         <input type="checkbox" id="residueOnlyFoldx" style="width:auto;margin-top:3px">
-        <span>Only residues FoldX can score
-          <span class="sub-note">FoldX has parameters for only a few
+        <span>Only residues with a ΔΔG
+          <span class="sub-note">The ΔΔG scorer has parameters for only a few
             non-canonicals. It does not fail on the others — it silently drops
             the residue and scores the rest of the peptide — so those designs
-            get no ΔΔG and are ranked on Rosetta’s interface and binding
+            get no ΔΔG and are ranked on the engine’s interface and binding
             scores instead.</span></span>
       </label>
     </div>

@@ -37,26 +37,26 @@ const $ = id => document.getElementById(id);
    worse than no finding at all. */
 const EXPLAIN = {
   evolution: {
-    shows: 'Best and median FoldX ΔΔG for every design in each iteration. '
+    shows: 'Best and median ΔΔG for every design in each iteration. '
          + 'The gap between the two lines is the spread of the population: if '
          + 'only the best line falls, one design improved; if both fall, the '
          + 'whole search moved.',
-    caveat: 'FoldX cannot score a non-canonical residue — it drops the residue '
+    caveat: 'The ΔΔG scorer cannot handle a non-canonical residue — it drops the residue '
           + 'and returns a value for the rest of the peptide. Designs carrying '
           + 'one are therefore not comparable on this axis.',
     with: ['agreement'],
   },
   agreement: {
-    shows: 'Each design placed by its FoldX ΔΔG against its Rosetta interface '
+    shows: 'Each design placed by its ΔΔG against its interface '
          + 'score. Two independent estimates of the same thing: where they '
          + 'disagree, at least one is wrong about that design.',
-    caveat: 'Only designs with both scores appear. Anything FoldX could not '
+    caveat: 'Only designs with both scores appear. Anything the ΔΔG scorer could not '
           + 'evaluate is absent from the plot entirely rather than shown as '
           + 'an outlier.',
     with: ['evolution'],
   },
   heatmap: {
-    shows: 'Pearson correlation between Rosetta energy terms across the '
+    shows: 'Pearson correlation between the energy terms across the '
          + 'designs. Terms that move together are measuring overlapping '
          + 'physics; a term that correlates with nothing is carrying its own '
          + 'signal.',
@@ -65,7 +65,7 @@ const EXPLAIN = {
     with: ['pca'],
   },
   pca: {
-    shows: 'Every design placed by its Rosetta score vector, projected onto '
+    shows: 'Every design placed by its energy score vector, projected onto '
          + 'the first two principal components. Points near each other scored '
          + 'alike across all terms, not merely on the total.',
     caveat: 'The projection is fitted on this job alone, so PC1 here and PC1 '

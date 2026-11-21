@@ -211,19 +211,19 @@ results-available state**, otherwise a client that maps unknown statuses to *run
 finished job forever.
 
 Treat a partial job as **terminal and downloadable**: the zip is complete, and
-`tab2_final_scores.csv` (when present) carries a `rosetta_available` column that is `False` for rows
-whose Rosetta score is unavailable. Those `Rosetta_Total_Score` cells are **empty — never `0`**.
+`tab2_final_scores.csv` (when present) carries a `energy_available` column that is `False` for rows
+whose Rosetta score is unavailable. Those `Total_Energy` cells are **empty — never `0`**.
 
 > #### 🔻 Behaviour change in v1.4.0 — "missing scores file" no longer detects a bad run
 >
 > Before v1.4.0, a failed aggregation left **no `tab2_final_scores.csv` at all**, so consumers could
 > detect the failure by the file's absence. v1.4.0 always writes the table (FoldX-only, Rosetta
-> column empty, `rosetta_available=False`) — deliberately, so a degraded run still yields usable
+> column empty, `energy_available=False`) — deliberately, so a degraded run still yields usable
 > results.
 >
 > **Consequence: the missing-file signal stops firing.** A degraded run now looks clean to any
 > consumer that isn't reading `partial` / `failed_stage`. After v1.4.0 **the flags are the only way
-> to distinguish a degraded run from a good one** — check `partial` (or `rosetta_available` in the
+> to distinguish a degraded run from a good one** — check `partial` (or `energy_available` in the
 > CSV), not the presence of the file.
 
 ### Get the result

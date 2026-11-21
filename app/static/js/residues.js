@@ -309,7 +309,7 @@ function rowNode(entry, locked) {
   code.className = 'res' + (locked ? '' : (isD ? ' dres' : ' ncaa'));
   code.textContent = shortLabel(entry);
   if (shortLabel(entry) !== entry.code) {
-    code.title = 'Rosetta type name: ' + entry.code;
+    code.title = 'Engine type name: ' + entry.code;
   }
 
   const name = document.createElement('span');
@@ -329,25 +329,25 @@ function rowNode(entry, locked) {
     // Positive marker, because only a handful qualify: FoldX has parameters
     // for these, so a design containing one gets a real FoldX ddG and can be
     // ranked and selected like any canonical design.
-    marks.push('· FoldX ✓');
-    tips.push('FoldX has parameters for this residue, so a design containing '
+    marks.push('· ΔΔG ✓');
+    tips.push('The ΔΔG scorer has parameters for this residue, so a design containing '
             + 'it gets a valid ddG and is ranked like any other.');
   } else if (entry.foldx === false && !isD) {
-    marks.push('· Rosetta score only');
-    tips.push('FoldX has no parameters for this residue. It does not fail on '
+    marks.push('· energy score only, no ΔΔG');
+    tips.push('The ΔΔG scorer has no parameters for this residue. It does not fail on '
             + 'it — it silently drops the residue and scores the rest of '
-            + 'the peptide — so no FoldX ddG is recorded, and designs '
-            + 'containing it are ranked on Rosetta’s interface and '
+            + 'the peptide — so no ΔΔG is recorded, and designs '
+            + 'containing it are ranked on the engine’s interface and '
             + 'binding scores instead.');
   } else if (isD) {
     // A D residue's FoldX problem is NOT the dropped-residue one. rotabase is
     // keyed on L names, so where the mirror inherits its parent's code FoldX
     // scores it AS the L form and returns a believable number for the wrong
     // molecule. Stated separately because the remedy is different.
-    marks.push('· Rosetta score only');
-    tips.push('FoldX cannot score a D residue: rotabase is keyed on L names, '
-            + 'so no FoldX ddG is recorded and designs containing it are '
-            + 'ranked on Rosetta’s interface and binding scores.');
+    marks.push('· energy score only, no ΔΔG');
+    tips.push('The ΔΔG scorer cannot score a D residue: its rotamer base is keyed on L names, '
+            + 'so no ΔΔG is recorded and designs containing it are '
+            + 'ranked on the engine’s interface and binding scores.');
   }
 
   if (entry.rotlib === false) {
@@ -355,14 +355,14 @@ function rowNode(entry, locked) {
     tips.push('No rotamer library: the packer gets one fixed side-chain '
             + 'conformation for this residue.');
   } else if (entry.rotlib === null) {
-    tips.push('Rosetta supplies this type and keeps its rotamer library in '
+    tips.push('The design engine supplies this type and keeps its rotamer library in '
             + 'its own database, which predPEP does not read — so whether '
             + 'one exists is not reported here.');
   }
 
   if (isD && entry.category !== D_CANONICAL_CATEGORY) {
     marks.push('· shares its L code');
-    tips.push('Rosetta mirrors this from the L form and has no separate '
+    tips.push('The design engine mirrors this from the L form and has no separate '
             + 'three-letter code for it, so in the output PDB it is written '
             + 'under its L parent’s code. Selecting it excludes that '
             + 'parent, which is what keeps the two tellable apart.');
@@ -423,14 +423,14 @@ function buildSections() {
   host.append(sectionNode(
     'L-canonical', cat.canonical_note, cat.canonical, true, false));
 
-  let lNote = 'From SwissSidechain, built and verified against this Rosetta '
+  let lNote = 'From SwissSidechain, built and verified against this engine '
             + 'build.';
   if (c.foldx_scorable) {
-    lNote += ' ' + c.foldx_scorable + ' of them are marked "FoldX ✓": FoldX '
+    lNote += ' ' + c.foldx_scorable + ' of them are marked "ΔΔG ✓": the scorer '
           + 'has parameters for those, so a design containing one gets a real '
-          + 'ΔΔG and is ranked like any canonical design. For the rest FoldX '
+          + 'ΔΔG and is ranked like any canonical design. For the rest it '
           + 'silently drops the residue rather than failing, so no ΔΔG is '
-          + 'recorded and the design is ranked on Rosetta’s interface and '
+          + 'recorded and the design is ranked on the engine’s interface and '
           + 'binding scores.';
   }
   if (c.without_rotlib) {
@@ -442,7 +442,7 @@ function buildSections() {
 
   if (dCanon.length) {
     host.append(sectionNode('D-canonical',
-      'Mirror images of the standard twenty. Rosetta builds them itself from '
+      'Mirror images of the standard twenty. The design engine builds them itself from '
       + 'the L forms — its D_AA patch flips any type carrying the L_AA '
       + 'property — so they need no parameters of ours. Each has its own '
       + 'three-letter code in the output PDB (DAL, DAR, DSG …), so a D design '
@@ -453,12 +453,12 @@ function buildSections() {
 
   if (dNon.length) {
     host.append(sectionNode('D-non-canonical',
-      'Mirror images of the L non-canonicals above, also generated by Rosetta '
+      'Mirror images of the L non-canonicals above, also generated by the engine '
       + 'from the L parameters. Unlike the D-canonicals these have no '
       + 'three-letter code of their own, so in the output PDB each is written '
       + 'under its L parent’s code. Selecting one therefore disables that '
       + 'parent: with at most one hand per molecule, the code plus the job’s '
-      + 'recorded palette always says which was used. FoldX cannot score any '
+      + 'recorded palette always says which was used. The ΔΔG scorer cannot score any '
       + 'of them.',
       dNon, false, true));
   }

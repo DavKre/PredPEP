@@ -192,15 +192,15 @@ ROSETTA_SUPPLIED = {
 # POLAR, which Rosetta's HLU does not.
 # ---------------------------------------------------------------------------
 PENDING_BUILD = {
-    '400': 'renamed from 004 (phenylglycine) to clear a Rosetta name '
+    '400': 'renamed from 004 (phenylglycine) to clear an engine name '
            'collision; params not built yet',
-    'TOM': 'renamed from MOT (5-methoxy-tryptophan) to clear a Rosetta name '
+    'TOM': 'renamed from MOT (5-methoxy-tryptophan) to clear an engine name '
            'collision; params not built yet',
-    'SAO': 'renamed from OAS (o-acetylserine) to clear a Rosetta name '
+    'SAO': 'renamed from OAS (o-acetylserine) to clear an engine name '
            'collision; params not built yet',
-    'HPM': 'renamed from MPH (2-methyl-phenylalanine) to clear a Rosetta '
+    'HPM': 'renamed from MPH (2-methyl-phenylalanine) to clear an engine '
            'name collision; params not built yet',
-    'ULH': 'renamed from HLU (beta-hydroxyleucine) to clear a Rosetta name '
+    'ULH': 'renamed from HLU (beta-hydroxyleucine) to clear an engine name '
            'collision; params not built yet',
 }
 # Self-clearing: `code in have` is tested before this map, so the moment
@@ -209,15 +209,15 @@ PENDING_BUILD = {
 
 
 NAME_COLLISIONS = {
-    '004': 'ours is phenylglycine; Rosetta peptoids/004.params is an '
+    '004': 'ours is phenylglycine; the engine ships peptoids/004.params, an '
            'N-substituted glycine',
-    'MOT': 'ours is 5-methoxy-tryptophan; Rosetta '
-           'nucleic/rna_nonnatural/MOT.params is an RNA residue',
-    'OAS': 'ours is o-acetylserine; Rosetta polyaramids/OAS.params is a '
+    'MOT': 'ours is 5-methoxy-tryptophan; the engine ships '
+           'nucleic/rna_nonnatural/MOT.params, an RNA residue',
+    'OAS': 'ours is o-acetylserine; the engine ships polyaramids/OAS.params, a '
            'polyaramid',
-    'MPH': 'ours is 2-methyl-phenylalanine; Rosetta l-ncaa/MPH.params is a '
-           'PHOSPHONATE (METALBINDING, ALIPHATIC, not AROMATIC)',
-    'HLU': 'ours is beta-hydroxyleucine; Rosetta l-ncaa/HLU.params is '
+    'MPH': 'ours is 2-methyl-phenylalanine; the engine ships l-ncaa/MPH.params, '
+           'a PHOSPHONATE (METALBINDING, ALIPHATIC, not AROMATIC)',
+    'HLU': 'ours is beta-hydroxyleucine; the engine ships l-ncaa/HLU.params, '
            'homoleucine (five-carbon side chain, no side-chain oxygen)',
 }
 
@@ -473,7 +473,7 @@ def load_catalogue(csv_path=None, params_dir=None, rotlib_dir=None):
            'params_dir': params_dir, 'error': None,
            'canonical_editable': False,
            'canonical_note': (
-               "Rosetta's packer palette can only ADD residue types to the "
+               "The engine's packer palette can only ADD residue types to the "
                "canonical twenty, never remove them, and pepspec applies no "
                "task operation that could. All twenty are therefore always "
                "available for design. Narrowing them needs the design stage "
@@ -554,7 +554,7 @@ def load_catalogue(csv_path=None, params_dir=None, rotlib_dir=None):
         elif code in ROSETTA_SUPPLIED and not permit_rosetta_ncaa:
             out['unavailable'].append({
                 'code': code, 'name': name, 'category': cat,
-                'reason': 'Rosetta has this type but the design protocol runs '
+                'reason': 'the engine has this type but the design protocol runs '
                           'pre-talaris, whose residue type set '
                           '(residue_types.txt.slim) contains no l-ncaa '
                           'entries, so the packer palette cannot resolve it'})
@@ -673,7 +673,7 @@ def load_catalogue(csv_path=None, params_dir=None, rotlib_dir=None):
         "FoldX has parameters for only a few non-canonical residues. It does "
         "not fail on the others -- it silently drops them and scores the rest "
         "of the peptide, so a design containing one has no valid FoldX ddG and "
-        "is ranked on Rosetta's own interface and binding scores instead."
+        "is ranked on the engine's own interface and binding scores instead."
     )
     return out
 
@@ -853,10 +853,10 @@ def public_payload():
         'unavailable': cat.get('unavailable', []),
         'retired_enforced': cat.get('retired_enforced', False),
         'd_note': (
-            "D residues carry no params of their own: Rosetta's D_AA patch "
+            "D residues carry no params of their own: the engine's D_AA patch "
             "mirrors each one from its L parent, which is why selecting a D "
             "non-canonical loads the L params file. FoldX cannot score them, "
-            "so a design containing one is ranked on Rosetta's interface and "
+            "so a design containing one is ranked on the engine's interface and "
             "binding scores alone."
         ) if cat.get('d_residues') else '',
         'foldx_known': cat.get('foldx_known', []),
@@ -934,7 +934,7 @@ if __name__ == '__main__':
         sys.exit(1)
     print('canonical      : %d (read-only: %s)'
           % (cat['counts']['canonical'], not cat['canonical_editable']))
-    print('offerable      : %d total -- %d L, %d D  (%d supplied by Rosetta)'
+    print('offerable      : %d total -- %d L, %d D  (%d supplied by the engine)'
           % (cat['counts']['noncanonical'], cat['counts']['l_offerable'],
              cat['counts']['d_offerable'], cat['counts']['rosetta_supplied']))
     for c in cat['collisions']:

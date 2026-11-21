@@ -465,7 +465,7 @@ def _prepare_spec_for_pdb(pdb_path, spec):
             f'chain {PEPTIDE_CHAIN} is not one continuous peptide '
             f'({_segment_description(chain)}), and this node cannot split it '
             f'(split_segments unavailable: {SPLITTER_IMPORT_ERROR}). Designing '
-            'it as one chain would have Rosetta bond the segments across that '
+            'it as one chain would have the design engine bond the segments across that '
             'gap and move one to close it, so the submission is refused.'), report
 
     if not spec:
@@ -824,7 +824,7 @@ def _submit_segmented(parent_id, pdb_path, upload_folder, result_folder,
             'other(s) as part of the receptor.')
     if any(c['caveat'] for c in created):
         note += (' Note: staples spanning two segments are not passed to '
-                 'Rosetta as fixed disulfides, so each run designs against a '
+                 'the design engine as fixed disulfides, so each run designs against a '
                  'receptor that contains the other segment rather than one '
                  'covalently joined to it.')
     return {

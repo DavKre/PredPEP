@@ -256,10 +256,10 @@ export function clear(id) {
    That is the question a position-preference logo cannot answer, because the
    logo aggregates away which DESIGN each residue came from. */
 export const COLOUR_FIELDS = [
-  { key: 'foldx', label: 'FoldX ΔΔG', kind: 'num', group: 'Scores',
-    get: r => num(r.FoldX_Score) },
-  { key: 'rosetta', label: 'Rosetta total', kind: 'num', group: 'Scores',
-    get: r => num(r.Rosetta_Total_Score) },
+  { key: 'foldx', label: 'ΔΔG', kind: 'num', group: 'Scores',
+    get: r => num(r.ddG_Score ?? r.FoldX_Score) },
+  { key: 'rosetta', label: 'Total energy', kind: 'num', group: 'Scores',
+    get: r => num(r.Total_Energy ?? r.Rosetta_Total_Score) },
   /* ORDINAL: categorical while the iterations fit the palette, the sequential
      ramp when they do not.
 
@@ -365,7 +365,7 @@ export function rosettaTermFields(rows) {
   const out = [];
   for (const [col, label] of ROSETTA_TERMS) {
     if (!rows.some(r => num(r[col]) != null)) continue;
-    out.push({ key: `rt_${col}`, label, kind: 'num', group: 'Rosetta terms',
+    out.push({ key: `rt_${col}`, label, kind: 'num', group: 'Energy terms',
                get: r => num(r[col]) });
   }
   return out;
@@ -649,9 +649,10 @@ export function hoverFor(rows, extraLines) {
       `<b>${String(r.pdbId || r.id || '—')}</b>`,
       res.length ? res.join(' ') : '',
     ];
-    const fx = num(r.FoldX_Score), rs = num(r.Rosetta_Total_Score);
-    if (fx != null) lines.push(`FoldX ΔΔG ${fx.toFixed(2)}`);
-    if (rs != null) lines.push(`Rosetta ${rs.toFixed(1)}`);
+    const fx = num(r.ddG_Score ?? r.FoldX_Score),
+          rs = num(r.Total_Energy ?? r.Rosetta_Total_Score);
+    if (fx != null) lines.push(`ΔΔG ${fx.toFixed(2)}`);
+    if (rs != null) lines.push(`Energy ${rs.toFixed(1)}`);
     const it = iterationOf(r);
     if (it != null) lines.push(`iteration ${it}`);
     if (extraLines && extraLines[i]) lines.push(extraLines[i]);

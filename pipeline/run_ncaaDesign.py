@@ -1096,7 +1096,7 @@ def main():
     if fx_skipped:
         print('%d design(s) have NO FoldX score: they contain residues FoldX '
               'has no parameters for, and it drops those silently rather than '
-              'failing. Rank those on Rosetta_Total_Score (or interface_score '
+              'failing. Rank those on Total_Energy (or interface_score '
               'in the per-model score.sc) instead. FoldX can score: %s.'
               % (fx_skipped, ' '.join(sorted(fx_known - set(CANONICAL))) or
                  '(canonicals only)'))

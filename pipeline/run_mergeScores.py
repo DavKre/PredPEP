@@ -300,8 +300,8 @@ def apply_post_filters(df, spec):
 def _write_foldx_only(df_foldx, output_file, spec):
     """Emit the score table we CAN build when Rosetta aggregation produced nothing.
 
-    Rosetta_Total_Score is left EMPTY -- never 0 and never invented -- and the
-    degradation is marked in-band via rosetta_available so a consumer reading only
+    Total_Energy is left EMPTY -- never 0 and never invented -- and the
+    degradation is marked in-band via energy_available so a consumer reading only
     the CSV can tell it is partial.
     """
     print("⚠️ Building a FoldX-only score table (Rosetta scores unavailable).")
@@ -498,7 +498,7 @@ def merge_and_clean_scores(foldx_file, rosetta_file, output_file):
                 print("⚠️ No design passes the filters; top10 falls back to the "
                       "unfiltered ranking. Treat it accordingly.")
 
-        # Sort by FoldX_Score (lowest is best). Rosetta ranking left commented
+        # Sort by ddG_Score (lowest is best). Rosetta ranking left commented
         # out as in the original.
         # df_top10 = pool.sort_values(by='Total_Energy').head(10)
         df_top10 = pool.sort_values(by='ddG_Score').head(10)

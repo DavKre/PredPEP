@@ -51,7 +51,7 @@ const COLUMNS = [
   { key: 'rank',        label: '#',             cls: 'mono',  sortable: false },
   { key: 'residues',    label: 'Sequence',      cls: '',      sortable: false },
   { key: 'iteration',   label: 'It.',           cls: 'mono',  sortable: true },
-  { key: 'foldx',       label: 'FoldX ΔΔG',     cls: 'num',   sortable: true },
+  { key: 'foldx',       label: 'ΔΔG',     cls: 'num',   sortable: true },
   { key: 'rosetta',     label: 'Total energy', cls: 'num',   sortable: true },
   { key: 'interface',   label: 'Interface',     cls: 'num',   sortable: true },
   // Its OWN column, not folded into Interface. dG_separated comes from
@@ -412,7 +412,7 @@ function renderDetail() {
     <h2 style="margin-bottom:10px">Selected design</h2>
     <div class="seq" style="margin-bottom:12px">${chips}</div>
     <dl class="props">
-      <div><dt>FoldX ΔΔG</dt><dd><strong>${fmtNum(r.foldx)}</strong></dd></div>
+      <div><dt>ΔΔG</dt><dd><strong>${fmtNum(r.foldx)}</strong></dd></div>
       <div><dt>Total energy</dt><dd>${isFinite(r.rosetta) ? fmtNum(r.rosetta, 1) : '—'}</dd></div>
       <div><dt>Interface</dt><dd>${isFinite(r.interface) ? fmtNum(r.interface, 1) : '—'}</dd></div>
       <div><dt>Binding</dt><dd>${isFinite(r.binding) ? fmtNum(r.binding, 1) : '—'}</dd></div>

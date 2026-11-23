@@ -5,6 +5,79 @@ scheduled; anything still being argued about belongs in a design note instead.
 
 ---
 
+## ~~Make the Results columns resizable~~ — DONE 23 Nov 2026
+
+Drag handle between the designs table and the structure column, plus a native
+resize grip on the 3D canvas; both persist per browser. `app/static/js/resizable.js`,
+wired from `results.js` in two lines so upstream's file barely diverges.
+
+---
+
+## Add a date column to the Operations table
+
+**What:** the ops jobs table shows Job · Owner · Cores·len · Status · Iterations ·
+Best ΔΔG · Elapsed. No date. v1.4.0's Jobs tab had both **Date** and
+**Completed** columns and they were dropped in v1.6.0 in favour of "Elapsed",
+which answers how long it took but not when it ran.
+
+**Where:** the header `<th>` list in `app/templates/index.html` (ops table) and
+the row builder in `app/static/js/ops.js` (~l.147, the `<tr class="pick">`
+template). The data is already in `/jobs`: `submitted_at` and `completed_at`,
+both ISO-8601 UTC.
+
+**Watch for:** `ops.js` ~l.56 builds the row's search haystack
+(`[j.job_id, j.protein_symbol, j.user_name, ...]`) — add the formatted date
+there too or the column will be visible but not searchable. Render in local
+time (`toLocaleString`) as the old Jobs tab did; the API speaks UTC.
+
+---
+
+## Make the left rail collapsible
+
+**What:** the nav rail is always open. On a laptop it costs width that the
+Results split and the analytics figures could use.
+
+**Where:** `<aside class="rail">` in `app/templates/index.html` (~l.54) and the
+`.rail` rules in `app/static/css/style.css` (~l.753).
+
+**Shape of the change:** a toggle button in `.rail-brand`, a `rail--collapsed`
+class on the aside, width driven by a CSS variable so `.main` reflows on its
+own. Collapse to an icon strip rather than to zero — navigation that vanishes
+entirely is hard to get back. Persist in `localStorage` wrapped in try/catch,
+like `resizable.js` does, and mirror the state in `aria-expanded`.
+
+**Watch for:** the Results split and every Plotly figure are sized in pixels, so
+the main area changing width must end in a resize call — `resizable.js` already
+exposes the pattern (`onResize` → `viewer.resize()`), and `console.js` has
+`resize(fig.node)`.
+
+---
+
+## Analytics: keep the thumbnail visible when a figure is focused
+
+**What:** clicking a thumbnail in the figure rail blanks that thumbnail. Asked
+for: leave the preview visible.
+
+**Why it happens:** `focus(key)` in `app/static/js/console.js` (l.171) **moves
+the one Plotly DOM node**, it does not copy it —
+
+    if (focusSlot) { focusSlot.append(fig.node); resize(fig.node); }
+
+and the previous figure is appended back into its own thumbnail on the way out.
+So the rail slot the figure came from is genuinely empty; nothing is being
+hidden by CSS and there is no class to stop toggling.
+
+**The fix that does not cost a second chart:** leave a static snapshot behind.
+Before moving the node, `Plotly.toImage(fig.node, {format:'png', ...})` and drop
+the result into the thumbnail slot as an `<img>`; remove it when the live node
+returns. One rendered figure stays live, the rail stays legible.
+
+**Avoid:** rendering each figure twice. There are eight of them and Plotly is
+4 MB; two live instances per figure is what the thumbnail-moving design was
+built to avoid in the first place.
+
+---
+
 ## Read the score table out of the job zip when it has been swept
 
 **What:** `/results_data/<job>` and `job_analytics._load_final()` look for

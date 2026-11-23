@@ -905,6 +905,35 @@ a:hover { color: var(--accent-ink); }
 .split > .wide { flex: 999 1 560px; min-width: 0; }
 .split > .side { flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 
+/* Re-proportioning the results split ------------------------------------
+   The default weights (999 against 1) are right for reading the score table
+   and wrong as soon as someone wants to look at a model, so the divider is
+   draggable. Once dragged, .split--sized pins the structure column to the
+   chosen width and lets the table take the rest; until then nothing changes.
+   Both are overridden below the wrap breakpoint, where the columns stack and
+   a vertical divider would be meaningless. */
+.split--sized > .side { flex: 0 0 var(--side-w, 380px); }
+.split--sized > .wide { flex: 1 1 0; }
+
+.split-handle {
+  flex: 0 0 6px; align-self: stretch; min-height: 120px;
+  border-radius: 3px; cursor: col-resize; background: var(--line-soft);
+  opacity: .55; transition: opacity .12s ease, background .12s ease;
+  touch-action: none;                 /* let a touch drag resize, not scroll */
+}
+.split-handle:hover, .split-handle:active { opacity: 1; background: var(--accent, var(--ink-3)); }
+.split-handle:focus-visible { outline: 2px solid var(--accent, var(--ink-2)); outline-offset: 2px; opacity: 1; }
+
+/* The 3D canvas is short in this view; let it be pulled taller. The grip is
+   the browser's own, so it costs nothing and behaves the way people expect.
+   results.js watches the element and tells NGL to re-fit its canvas. */
+.viewer { resize: vertical; overflow: hidden; min-height: 180px; }
+
+@media (max-width: 900px) {
+  .split-handle { display: none; }
+  .split--sized > .side, .split--sized > .wide { flex: 1 1 100%; }
+}
+
 /* ---------------------------------------------------------------- stats */
 
 .stat { display: flex; flex-direction: column; gap: 7px; padding: 13px 15px; }

@@ -2,6 +2,7 @@
 
 import { api, esc, fmtNum } from './api.js';
 import { createViewer } from './viewer.js';
+import { makeResultsResizable } from './resizable.js';
 
 const PAGE = 50;
 
@@ -572,6 +573,15 @@ function exportCsv() {
 
 export function init() {
   state.viewer = createViewer('resultViewer');
+  // The default proportions favour the score table, which is wrong the moment
+  // someone wants to look at a model. Let the reader re-balance the split and
+  // pull the canvas taller; NGL has to be told whenever either changes.
+  makeResultsResizable({
+    splitId: 'resultsSplit',
+    handleId: 'resultsSplitHandle',
+    viewerId: 'resultViewer',
+    onResize: () => state.viewer && state.viewer.resize(),
+  });
   renderHead();
 
   document.getElementById('resultsJob')?.addEventListener('change', e => load(e.target.value));

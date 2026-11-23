@@ -427,7 +427,7 @@
         <span class="small muted" id="resultsCount" style="margin-left:auto;padding-bottom:10px"></span>
       </section>
 
-      <div class="split">
+      <div class="split" id="resultsSplit">
         <section class="card wide" aria-labelledby="designsH">
           <div class="card-head">
             <h2 id="designsH">Designs</h2>
@@ -447,6 +447,11 @@
             </div>
           </div>
         </section>
+
+        <div class="split-handle" id="resultsSplitHandle" role="separator"
+             aria-orientation="vertical" tabindex="0"
+             aria-label="Resize the designs table and the structure panel"
+             title="Drag to resize · double-click to reset · arrow keys to nudge"></div>
 
         <div class="side">
           <div class="card">

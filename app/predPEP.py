@@ -1007,6 +1007,16 @@ def list_jobs():
             if not os.path.isdir(jdir):
                 continue
 
+            # public_status() FIRST, then job.json. It is not a pure read: for a
+            # job whose manager has just died it derives the terminal state and
+            # finalises job.json, stamping iterations_done and finish_reason. Read
+            # the file first and the row pairs a fresh 'Complete' with the stale
+            # pre-finalize meta, so on the one poll that catches the transition the
+            # Operations table showed a finished job with a blank iteration count
+            # and a still-counting Elapsed. It corrected itself on the next poll,
+            # which is exactly what made it easy to miss.
+            view = scheduler.public_status(entry)
+
             meta = {}
             meta_path = os.path.join(jdir, 'job.json')
             if os.path.exists(meta_path):
@@ -1017,7 +1027,6 @@ def list_jobs():
                     meta = {}
             meta.setdefault('job_id', entry)
 
-            view = scheduler.public_status(entry)
             disp = view['status']
             meta['status'] = disp
             meta['download_url'] = view['download_url']

@@ -74,7 +74,10 @@ if [ "${FORCE:-0}" != "1" ] && docker container inspect "$NAME" >/dev/null 2>&1;
     echo "  override with FORCE=1 only if you are certain the node is idle." >&2
     exit 1
   fi
-  busy="$(printf '%s' "$body" | grep -o '"status": *"\(Running\|Queued\)"' | wc -l)"
+  # grep exits 1 when it matches nothing, and with pipefail+set -e that killed
+  # the script on an IDLE node -- refusing to deploy in exactly the case where
+  # deploying is safe, and saying nothing. Hence the || true.
+  busy="$(printf '%s' "$body" | grep -c '"status": *"\(Running\|Queued\)"' || true)"
   if [ "${busy:-0}" -gt 0 ]; then
     echo "error: $busy job(s) Running/Queued on this node — recreating would kill them." >&2
     echo "  wait for them to finish, or re-run with FORCE=1 to proceed anyway." >&2

@@ -5,6 +5,35 @@ scheduled; anything still being argued about belongs in a design note instead.
 
 ---
 
+## Read the score table out of the job zip when it has been swept
+
+**What:** `/results_data/<job>` and `job_analytics._load_final()` look for
+`tab2_final_scores.csv` on disk and give up when it is gone. The post-job sweep
+removes it, so a finished job keeps only its `.zip` -- and on the node here that
+is **60 of 71 jobs**, whose Results and Analytics views are therefore empty even
+though the data exists.
+
+It does exist. Checked inside two archives:
+
+    SPAARH_9b25f4c4 (127M):   tab2_final_scores.csv  150951 bytes
+    SPAZOH_19495934 (478M):   tab2_final_scores.csv  611319 bytes
+
+**Why it is reasonable:** v1.6.0 already does exactly this for models --
+`/stream_final_pdb` falls back to reading the member straight out of the archive,
+described in the dev's notes as "a seek, not an extraction". The same trick on
+one small CSV would restore the interactive views for every archived job at no
+disk cost.
+
+**Where:** `job_analytics._load_final()` (add a zipfile fallback after the
+`os.path.exists` check) and the `/results_data` route in `predPEP.py`, which
+reads the file directly. Both already normalise legacy column names, so old
+archives need nothing extra.
+
+**Not a regression** -- those jobs render identically on the v1.4.0 node, which
+is to say not at all. This would be an improvement over both.
+
+---
+
 ## ~~Replace the TMAP fingerprint in the UI with MAP4 / MAP4C~~ — DONE 21 Nov 2026
 
 Implemented as MAP4C (`mapchiral==0.0.7`, Orsi et al.), default on, with

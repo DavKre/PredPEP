@@ -1345,8 +1345,18 @@ dl.props dd { margin: 0; font-family: var(--mono); font-size: 12.5px;
    open" without pretending to preview it. Safe to display:none here only
    because the node is elsewhere; a slot that HOLDS a figure must keep a box
    or Plotly measures zero (see the note at the responsive rules below). */
-.fig-thumb--on .fig-thumb__slot { display: none; }
-.fig-thumb--on .fig-thumb__name { margin-bottom: 0; }
+/* The focused figure's node is in #figFocus, so its own slot would be empty.
+   It used to be collapsed for that reason, but collapsing the item the reader
+   just clicked makes the rail jump and takes away the preview they were
+   looking at. console.js now leaves a still image of the figure behind, so the
+   thumbnail keeps showing what it showed. The slot only collapses when no
+   still could be produced -- a figure that never drew, or a non-Plotly one. */
+.fig-thumb__still {
+  display: block; width: 100%; height: 100%;
+  object-fit: cover; object-position: top left;
+}
+.fig-thumb--blank .fig-thumb__slot { display: none; }
+.fig-thumb--blank .fig-thumb__name { margin-bottom: 0; }
 .fig-thumb__slot .chart-note,
 .fig-thumb__slot .sr-only { display: none; }
 

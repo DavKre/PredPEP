@@ -53,10 +53,21 @@ exposes the pattern (`onResize` → `viewer.resize()`), and `console.js` has
 
 ---
 
-## Analytics: keep the thumbnail visible when a figure is focused
+## ~~Analytics: keep the thumbnail visible when a figure is focused~~ — DONE 23 Nov 2026
 
 **What:** clicking a thumbnail in the figure rail blanks that thumbnail. Asked
 for: leave the preview visible.
+
+**Done.** The diagnosis below was half right and half wrong, which is worth
+keeping. The node move is real, but it was **not** the whole cause: there was
+also an explicit rule collapsing the slot, which the entry said did not exist —
+
+    .fig-thumb--on .fig-thumb__slot { display: none; }
+
+Both are now handled: the rule is gone, and `leaveStill()` puts a
+`Plotly.toImage` still of the figure into the slot it vacated. A figure that has
+not drawn yet, or whose snapshot fails, falls back to `.fig-thumb--blank`, which
+collapses that one slot as before rather than leaving an empty box.
 
 **Why it happens:** `focus(key)` in `app/static/js/console.js` (l.171) **moves
 the one Plotly DOM node**, it does not copy it —

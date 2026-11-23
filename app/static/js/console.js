@@ -168,6 +168,50 @@ function resize(node) {
   });
 }
 
+/* Keeping a thumbnail readable while its figure is away ---------------------
+
+   focus() MOVES the figure node into #figFocus -- there is one Plotly instance
+   per figure and that is deliberate: eight live instances of a 4MB library is
+   not a trade worth making for a 176x63 preview. So the slot the figure came
+   from is genuinely empty, and it used to be collapsed to hide that.
+
+   Instead, leave a still image of the figure behind. Plotly can hand us a PNG
+   of exactly what it drew, so the thumbnail keeps showing what the reader just
+   clicked, the rail stops jumping, and nothing is rendered twice. */
+
+function clearStill(slot) {
+  if (!slot) return;
+  slot.querySelectorAll('.fig-thumb__still').forEach(n => n.remove());
+  const btn = slot.closest('.fig-thumb');
+  if (btn) btn.classList.remove('fig-thumb--blank');
+}
+
+function leaveStill(fig, slot) {
+  if (!slot) return;
+  const btn = slot.closest('.fig-thumb');
+  const blank = () => { if (btn) btn.classList.add('fig-thumb--blank'); };
+  const plot = fig.node && fig.node.querySelector('.js-plotly-plot');
+
+  // A figure that never drew, or one that is not a Plotly plot at all, has no
+  // image to give. Collapse that slot rather than leave an empty bordered box,
+  // which reads as a figure that failed.
+  if (!plot || !window.Plotly || !window.Plotly.toImage) { blank(); return; }
+
+  window.Plotly.toImage(plot, { format: 'png', width: THUMB_W, height: 150 })
+    .then(url => {
+      // The reader may have clicked elsewhere while this was rendering, in
+      // which case the live node is already back and must not be covered.
+      if (state.focus !== fig.key) return;
+      clearStill(slot);
+      const img = document.createElement('img');
+      img.className = 'fig-thumb__still';
+      img.alt = '';                 // decorative: the name is in the button
+      img.src = url;
+      slot.append(img);
+    })
+    .catch(blank);
+}
+
 export function focus(key) {
   const fig = state.figures.find(f => f.key === key);
   if (!fig) return;
@@ -177,11 +221,15 @@ export function focus(key) {
   if (state.focus && state.focus !== key) {
     const prev = state.figures.find(f => f.key === state.focus);
     const slot = $(RAIL).querySelector(`[data-fig="${state.focus}"] .fig-thumb__slot`);
-    if (prev && slot) { slot.append(prev.node); fitThumb(slot); resize(prev.node); }
+    if (prev && slot) { clearStill(slot); slot.append(prev.node); fitThumb(slot); resize(prev.node); }
   }
 
   if (focusSlot) { focusSlot.append(fig.node); resize(fig.node); }
   state.focus = key;
+
+  // The slot this figure just left keeps a still of it, so the item the reader
+  // clicked goes on showing its preview instead of collapsing.
+  leaveStill(fig, $(RAIL).querySelector(`[data-fig="${key}"] .fig-thumb__slot`));
 
   $(RAIL).querySelectorAll('.fig-thumb').forEach(b => {
     const on = b.dataset.fig === key;

@@ -82,10 +82,22 @@ if [ "${FORCE:-0}" != "1" ] && docker container inspect "$NAME" >/dev/null 2>&1;
   fi
 fi
 
+# Tuning knobs, forwarded only when set in the environment. run.sh has always
+# done this; deploy.sh did not, which meant the documented deploy path could not
+# set a retention policy at all -- and the image's default of 30 days will evict
+# any job older than that, archiving it first but dropping it out of the jobs
+# list. Migrating an older node's history onto a new one needs this.
+ENV_ARGS=()
+for v in PREDPEP_CORE_BUDGET PREDPEP_RETENTION_BYTES PREDPEP_RETENTION_DAYS PREDPEP_PARTIAL_STATUS PREDPEP_FINGERPRINT; do
+  [ -n "${!v:-}" ] && ENV_ARGS+=( -e "$v=${!v}" )
+done
+[ -n "${PREDPEP_MEMORY:-}" ] && ENV_ARGS+=( --memory "${PREDPEP_MEMORY}" )
+
 # (Re)create the container. This removes only the CONTAINER — $DATA is never touched.
 # Host 6363 (the port the DDN dispatcher dials) -> container 8383 (upstream's bind).
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 docker run -d --name "$NAME" \
+  "${ENV_ARGS[@]+"${ENV_ARGS[@]}"}" \
   -v "$DATA":/data \
   --log-opt max-size=10m --log-opt max-file=3 \
   --pids-limit 4096 --stop-timeout 120 \

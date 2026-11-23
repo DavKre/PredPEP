@@ -989,6 +989,7 @@ def check_status(job_id):
         'status': view['status'],
         'download_url': view['download_url'],
         'partial': view['partial'],
+        'paused': view['paused'],
         'failed_stage': view['failed_stage'],
         'artifacts': view['artifacts'],
         'message': view['message'] or f"Job {view['status'].lower()}.",
@@ -1021,6 +1022,7 @@ def list_jobs():
             meta['status'] = disp
             meta['download_url'] = view['download_url']
             meta['partial'] = view['partial']
+            meta['paused'] = view['paused']
             meta['failed_stage'] = view['failed_stage']
             meta['message'] = view['message']
             meta['artifacts'] = view['artifacts']
@@ -1077,6 +1079,45 @@ def delete_job(job_id):
 
     auth.audit('delete job', job_id)
     return jsonify({'success': True, 'deleted': job_id})
+
+
+@predPEP.route('/jobs/<job_id>/pause', methods=['POST'])
+@auth.require('admin')
+def pause_job(job_id):
+    """Freeze a running job: SIGSTOP its process group, leave it reading Running.
+
+    This frees CPU for whoever is at the console; it does NOT return the job's
+    cores to the fleet. The reservation stands and the frozen Rosetta keeps its
+    memory, so the node still counts those cores as busy -- which is honest,
+    since resuming has to find them again.
+    """
+    if not _safe_job_id(job_id):
+        return jsonify({'success': False, 'error': 'Invalid job id.'}), 400
+    if not os.path.isdir(_job_dir(job_id)):
+        return jsonify({'success': False, 'error': 'Job not found.'}), 404
+
+    ok, err = scheduler.pause_job(job_id)
+    if not ok:
+        return jsonify({'success': False, 'error': err}), 409
+    auth.audit('pause job', job_id)
+    return jsonify({'success': True, 'paused': job_id,
+                    'max_pause_hours': scheduler.MAX_PAUSE_SECONDS // 3600})
+
+
+@predPEP.route('/jobs/<job_id>/resume', methods=['POST'])
+@auth.require('admin')
+def resume_job(job_id):
+    """SIGCONT a paused job's process group."""
+    if not _safe_job_id(job_id):
+        return jsonify({'success': False, 'error': 'Invalid job id.'}), 400
+    if not os.path.isdir(_job_dir(job_id)):
+        return jsonify({'success': False, 'error': 'Job not found.'}), 404
+
+    ok, err = scheduler.resume_job(job_id)
+    if not ok:
+        return jsonify({'success': False, 'error': err}), 409
+    auth.audit('resume job', job_id)
+    return jsonify({'success': True, 'resumed': job_id})
 
 
 @predPEP.route('/jobs/<job_id>/stop', methods=['POST'])

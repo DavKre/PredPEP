@@ -139,6 +139,13 @@ else:
 RETENTION_BYTES = int(os.environ.get('PREDPEP_RETENTION_BYTES', 50 * 1024 ** 3))
 RETENTION_DAYS = int(os.environ.get('PREDPEP_RETENTION_DAYS', 180))
 
+# A pause freezes the manager's process group. It does NOT return the job's cores
+# to the node: the reservation stands and the frozen Rosetta keeps its memory, so
+# a job left paused holds capacity it is not using. Hence a ceiling -- past it the
+# scheduler resumes the job itself rather than letting a forgotten pause hold a
+# machine. 0 disables the ceiling.
+MAX_PAUSE_SECONDS = int(os.environ.get('PREDPEP_MAX_PAUSE_HOURS', 24)) * 3600
+
 # Where an evicted job is kept after it leaves the results directory.
 #
 # Set PREDPEP_ARCHIVE_DIR to a mounted path when one is available. Until then
@@ -275,6 +282,8 @@ def _finalize(job_id, status):
     meta['job_id'] = job_id
     meta['status'] = status
     meta.setdefault('completed_at', _now_iso())
+    meta.pop('paused', None)                    # terminal jobs are never paused
+    meta.pop('paused_at', None)
     if 'iterations_done' not in meta:
         meta['iterations_done'] = count_iterations(job_id)
     if status == 'complete':
@@ -323,15 +332,102 @@ def _manager_alive(job_id):
 
 def kill_job(job_id):
     """SIGKILL the manager process group, guarding against PID reuse. Returns True if killed."""
+    # SIGKILL is not blockable and reaches a SIGSTOPped group too, so cancelling a
+    # paused job needs no SIGCONT first.
+    return _signal_group(job_id, signal.SIGKILL)
+
+
+def _signal_group(job_id, sig):
+    """Send `sig` to the manager's whole process group, guarding against PID reuse.
+
+    Safe for SIGSTOP/SIGCONT because nothing in the pipeline detaches: every
+    subprocess.run and the one Popen in run_iteMAN.py inherit this group, so the
+    freeze reaches pepspec, rosetta_scripts and FoldX too rather than leaving
+    workers burning CPU under a UI that says "paused".
+    """
     try:
         with open(os.path.join(_jdir(job_id), 'manager.pid')) as f:
             pid = int(f.read().strip())
         if _pid_is_manager(pid):
-            os.killpg(os.getpgid(pid), signal.SIGKILL)
+            os.killpg(os.getpgid(pid), sig)
             return True
     except (FileNotFoundError, ProcessLookupError, ValueError, PermissionError):
         pass
     return False
+
+
+def _set_paused(job_id, paused):
+    meta = _read_meta(job_id)
+    meta['job_id'] = job_id
+    if paused:
+        meta['paused'] = True
+        meta['paused_at'] = _now_iso()
+    else:
+        meta.pop('paused', None)
+        meta.pop('paused_at', None)
+    try:
+        with open(os.path.join(_jdir(job_id), 'job.json'), 'w') as f:
+            json.dump(meta, f)
+    except Exception:
+        pass
+
+
+def is_paused(job_id):
+    return bool(_read_meta(job_id).get('paused'))
+
+
+def pause_job(job_id):
+    """SIGSTOP a running job's process group. Returns (ok, error).
+
+    The flag goes in job.json, not in memory: a gunicorn worker restart must not
+    lose track of a frozen process, which would otherwise sit stopped forever
+    with nothing recording why.
+    """
+    if job_id in _queue:
+        return False, 'Job is queued, not running; nothing to pause.'
+    if not _manager_alive(job_id):
+        return False, 'Job is not running.'
+    if is_paused(job_id):
+        return True, None                      # idempotent
+    if not _signal_group(job_id, signal.SIGSTOP):
+        return False, 'Could not signal the job.'
+    _set_paused(job_id, True)
+    return True, None
+
+
+def resume_job(job_id):
+    """SIGCONT a paused job's process group. Returns (ok, error)."""
+    if not is_paused(job_id):
+        return False, 'Job is not paused.'
+    if not _manager_alive(job_id):
+        _set_paused(job_id, False)             # died while frozen; reconcile handles it
+        return False, 'Job is no longer running.'
+    if not _signal_group(job_id, signal.SIGCONT):
+        return False, 'Could not signal the job.'
+    _set_paused(job_id, False)
+    return True, None
+
+
+def _auto_resume_overdue():
+    """Resume anything paused longer than the ceiling.
+
+    Driven from the scheduler tick rather than a threading.Timer, which would die
+    with the worker that set it and leave the job frozen indefinitely.
+    """
+    if MAX_PAUSE_SECONDS <= 0:
+        return
+    for job_id in list(_running):
+        meta = _read_meta(job_id)
+        if not meta.get('paused'):
+            continue
+        try:
+            started = datetime.fromisoformat(meta['paused_at']).timestamp()
+        except Exception:
+            started = 0
+        if started and time.time() - started > MAX_PAUSE_SECONDS:
+            ok, _ = resume_job(job_id)
+            print('[scheduler] auto-resumed %s after %d h paused'
+                  % (job_id, MAX_PAUSE_SECONDS // 3600), flush=True)
 
 
 def enqueue(job_id, manager_command, cpus):
@@ -541,6 +637,11 @@ def _strip_iteration_dir(path):
 
 
 def _tick():
+    # 0) release any pause that has outstayed its ceiling
+    try:
+        _auto_resume_overdue()
+    except Exception as e:
+        print('[scheduler] auto-resume error: %s' % e, flush=True)
     # 1) completion detection — free cores for finished/dead managers
     for job_id, _cpus in list(_running.items()):
         if not _manager_alive(job_id):
@@ -752,6 +853,10 @@ def public_status(job_id):
     return {
         'status': disp,
         'partial': partial,
+        # A paused job is still Running on the wire. New status STRINGS break the
+        # dispatcher (see the module header on 'partial'); an added boolean does
+        # not, and a consumer that ignores it simply sees a job taking longer.
+        'paused': bool(meta.get('paused')) and raw == 'running',
         'failed_stage': failed_stage,
         'message': message,
         # Recorded at finalize time (before cleanup removes them); scanned live for

@@ -75,6 +75,8 @@ export const api = {
   jobs:         ()          => get('/jobs'),
   job:          (id)        => get('/status/' + encodeURIComponent(id)),
   stopJob:      (id)        => send('/jobs/' + encodeURIComponent(id) + '/stop', 'POST'),
+  pauseJob:     (id)        => send('/jobs/' + encodeURIComponent(id) + '/pause', 'POST'),
+  resumeJob:    (id)        => send('/jobs/' + encodeURIComponent(id) + '/resume', 'POST'),
   deleteJob:    (id)        => send('/jobs/' + encodeURIComponent(id), 'DELETE'),
 
   // Per-iteration metrics the manager records as it goes (iteration_metrics.json).

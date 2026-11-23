@@ -172,6 +172,21 @@ treats `Partial` as a terminal, results-available state, partial jobs report
 `Complete` with `partial: true` and `failed_stage` set. **Read `partial`, not just
 `status`.** Once the dispatcher handles it, the nodes can have the gate turned on.
 
+**Pause is a boolean, not a status.** A node operator can freeze a running job
+(`POST /jobs/<id>/pause`, `/resume`, admin scope). A paused job keeps
+`status: Running` and sets `paused: true` -- deliberately, after what `Partial`
+cost: adding a status STRING breaks a client that maps unknown ones to *running*
+and polls without a timeout, whereas an added boolean is ignorable. A dispatcher
+that never reads `paused` sees a job taking longer, which is exactly what is
+happening.
+
+Two things follow for dispatch. A paused job **keeps its cores reserved**, so
+`available_cores` does not rise when one is frozen -- pause frees CPU for whoever
+is at the console, it does not return capacity to the fleet. And because the node
+cannot know when an operator will come back, a pause expires: past
+`PREDPEP_MAX_PAUSE_HOURS` (default 24) the scheduler resumes the job itself,
+rather than letting a forgotten pause hold a machine and poll forever.
+
 **Version skew.** `/health` reports the node version unauthenticated. During a
 staged rollout, refusing to dispatch to a node whose version is not the expected
 one is the cheapest guard against mixing results from two releases — which are

@@ -146,16 +146,22 @@ function renderTable() {
   body.innerHTML = rows.map(j => {
     const sel = j.job_id === state.selected;
     const stoppable = j.status === 'Running' || j.status === 'Queued';
+    // A paused job stays Running on the wire deliberately, so the row itself
+    // has to say it is frozen -- otherwise it merely looks slow.
+    const pausedNote = j.paused ? '<span class="sub-note">paused · cores still held</span>' : '';
     return `<tr class="pick" data-id="${esc(j.job_id)}" aria-selected="${sel}">
       <td><strong>${esc(j.protein_symbol)}</strong><span class="sub-note mono">${esc(j.job_id)}</span>${segLabel(j)}</td>
       <td>${esc(j.user_name)}</td>
       <td class="mono">${esc(j.cpus)} · ${esc(j.peptide_length)}</td>
-      <td>${badge(j)}${j.failed_stage ? `<span class="sub-note">${esc(j.failed_stage)}</span>` : ''}</td>
+      <td>${badge(j)}${pausedNote}${j.failed_stage ? `<span class="sub-note">${esc(j.failed_stage)}</span>` : ''}</td>
       <td>${iterCells(j)}</td>
       <td class="num">${j.best_score == null ? '—' : fmtNum(j.best_score)}</td>
       <td class="small" style="white-space:nowrap">${fmtWhen(j.submitted_at)}</td>
       <td>${fmtElapsed(j.submitted_at, j.completed_at)}</td>
       <td style="text-align:right;white-space:nowrap">
+        ${j.status === 'Running' ? (j.paused
+            ? `<button class="btn-sm" data-resume="${esc(j.job_id)}">Resume</button> `
+            : `<button class="btn-sm" data-pause="${esc(j.job_id)}">Pause</button> `) : ''}
         ${stoppable ? `<button class="btn-sm" data-stop="${esc(j.job_id)}">Stop</button> ` : ''}
         <button class="btn-sm btn-danger" data-del="${esc(j.job_id)}">Delete</button>
       </td>
@@ -348,6 +354,18 @@ export function init(ctx) {
       e.stopPropagation();
       if (!confirm('Stop job ' + stop.dataset.stop + '? Its pipeline is terminated.')) return;
       try { await api.stopJob(stop.dataset.stop); } catch (err) { alert(err.message); }
+      return refresh();
+    }
+    const pause = e.target.closest('[data-pause]');
+    if (pause) {
+      e.stopPropagation();
+      try { await api.pauseJob(pause.dataset.pause); } catch (err) { alert(err.message); }
+      return refresh();
+    }
+    const resume = e.target.closest('[data-resume]');
+    if (resume) {
+      e.stopPropagation();
+      try { await api.resumeJob(resume.dataset.resume); } catch (err) { alert(err.message); }
       return refresh();
     }
     const del = e.target.closest('[data-del]');

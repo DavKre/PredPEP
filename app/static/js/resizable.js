@@ -42,6 +42,11 @@ function clampSide(split, px) {
   return Math.round(Math.min(Math.max(px, MIN_SIDE), max));
 }
 
+/** Clamp the viewer height to something a structure is actually visible in. */
+function clampH(px) {
+  return Math.round(Math.min(Math.max(px, MIN_VIEWER), MAX_VIEWER));
+}
+
 function applySide(split, px) {
   split.style.setProperty('--side-w', px + 'px');
   split.classList.add('split--sized');
@@ -52,12 +57,14 @@ function applySide(split, px) {
  * @param {string} opts.splitId   id of the flex row holding .wide and .side
  * @param {string} opts.handleId  id of the drag handle between them
  * @param {string} opts.viewerId  id of the NGL container
+ * @param {string} opts.gripId    id of the bar under it that drags its height
  * @param {function} opts.onResize called (debounced by rAF) after any change
  */
-export function makeResultsResizable({ splitId, handleId, viewerId, onResize }) {
+export function makeResultsResizable({ splitId, handleId, viewerId, gripId, onResize }) {
   const split = document.getElementById(splitId);
   const handle = document.getElementById(handleId);
   const viewer = document.getElementById(viewerId);
+  const grip = document.getElementById(gripId || 'resultViewerGrip');
   if (!split) return;
 
   let frame = 0;
@@ -135,21 +142,104 @@ export function makeResultsResizable({ splitId, handleId, viewerId, onResize }) 
 
   /* --------------------------------------------------------- the viewer */
 
+  // `resize: vertical` was tried here and does not work: NGL fills the element
+  // with its own canvas, which paints over the browser's resize corner. So the
+  // height is driven by an explicit grip under the canvas instead.
   if (viewer) {
     const h = parseInt(readStore(STORE_VIEWER) || '', 10);
-    if (Number.isFinite(h)) {
-      viewer.style.height = Math.min(Math.max(h, MIN_VIEWER), MAX_VIEWER) + 'px';
+    if (Number.isFinite(h)) viewer.style.height = clampH(h) + 'px';
+
+    if (grip) {
+      let dragging = false, startY = 0, startH = 0;
+
+      const move = ev => {
+        if (!dragging) return;
+        const y = ev.touches ? ev.touches[0].clientY : ev.clientY;
+        viewer.style.height = clampH(startH + (y - startY)) + 'px';
+        notify();
+      };
+      const end = () => {
+        if (!dragging) return;
+        dragging = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        writeStore(STORE_VIEWER, String(viewer.clientHeight));
+        notify();
+      };
+      const start = ev => {
+        dragging = true;
+        startY = ev.touches ? ev.touches[0].clientY : ev.clientY;
+        startH = viewer.clientHeight;
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+        ev.preventDefault();
+      };
+
+      grip.addEventListener('mousedown', start);
+      grip.addEventListener('touchstart', start, { passive: false });
+      window.addEventListener('mousemove', move);
+      window.addEventListener('touchmove', move, { passive: true });
+      window.addEventListener('mouseup', end);
+      window.addEventListener('touchend', end);
+
+      grip.addEventListener('keydown', ev => {
+        const step = ev.shiftKey ? 80 : 20;
+        let delta = 0;
+        if (ev.key === 'ArrowDown') delta = step;
+        else if (ev.key === 'ArrowUp') delta = -step;
+        else if (ev.key === 'End') delta = 9999;
+        else if (ev.key === 'Home') delta = -9999;
+        else return;
+        ev.preventDefault();
+        viewer.style.height = clampH(viewer.clientHeight + delta) + 'px';
+        writeStore(STORE_VIEWER, String(viewer.clientHeight));
+        notify();
+      });
+
+      grip.addEventListener('dblclick', () => {
+        viewer.style.removeProperty('height');   // back to the stylesheet's 260px
+        try { localStorage.removeItem(STORE_VIEWER); } catch (e) { /* ignore */ }
+        notify();
+      });
     }
-    if ('ResizeObserver' in window) {
-      let last = viewer.clientHeight;
-      new ResizeObserver(() => {
-        notify();                                   // the canvas must follow
-        const now = viewer.clientHeight;
-        if (now !== last && now >= MIN_VIEWER) {     // remember a deliberate drag
-          last = now;
-          writeStore(STORE_VIEWER, String(now));
-        }
-      }).observe(viewer);
-    }
+
+    // Covers the drag, the split, and anything else that reflows the card.
+    if ('ResizeObserver' in window) new ResizeObserver(notify).observe(viewer);
   }
+}
+
+/* ===========================================================================
+   The nav rail, collapsed to an icon strip.
+
+   Width is a CSS class, not a measured pixel value, so .main reflows on its
+   own. The only thing JS must do afterwards is tell the pixel-sized canvases
+   to refit: Plotly figures are created with responsive:true and the NGL stage
+   listens for window resize, so one dispatched resize event reaches both --
+   after the 140ms width transition, or it measures the old width.
+   =========================================================================== */
+
+const STORE_RAIL = 'predpep.rail.collapsed';
+
+export function makeRailCollapsible({ railId, toggleId } = {}) {
+  const rail = document.getElementById(railId || 'rail');
+  const btn = document.getElementById(toggleId || 'railToggle');
+  if (!rail || !btn) return;
+
+  const labels = [...rail.querySelectorAll('.rail-nav a')];
+
+  const apply = (collapsed, persist) => {
+    rail.classList.toggle('rail--collapsed', collapsed);
+    btn.setAttribute('aria-expanded', String(!collapsed));
+    btn.title = collapsed ? 'Expand the sidebar' : 'Collapse the sidebar';
+    // Collapsed, the link text is off-screen, so the icon needs its own name.
+    labels.forEach(a => {
+      if (collapsed) a.title = a.textContent.trim();
+      else a.removeAttribute('title');
+    });
+    if (persist) writeStore(STORE_RAIL, collapsed ? '1' : '0');
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 180);
+  };
+
+  apply(readStore(STORE_RAIL) === '1', false);
+  btn.addEventListener('click', () => apply(!rail.classList.contains('rail--collapsed'), true));
 }

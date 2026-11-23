@@ -53,7 +53,10 @@ function visible() {
     // parent_job is included so searching the id of a split submission finds
     // every sub-job derived from it, not none of them: the parent id appears in
     // no sub-job's own job_id beyond a shared prefix.
-    return [j.job_id, j.protein_symbol, j.user_name,
+    // The formatted date joins the haystack, not the raw ISO stamp: the column
+    // reads "23 Nov 26, 09:11", and a search box that cannot find what the row
+    // visibly says is worse than no search at all.
+    return [j.job_id, j.protein_symbol, j.user_name, fmtWhen(j.submitted_at),
             j.segment && j.segment.parent_job].some(
       v => String(v || '').toLowerCase().includes(q));
   });
@@ -135,7 +138,7 @@ function renderTable() {
   if (!body) return;
   const rows = visible();
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="8" class="empty">' +
+    body.innerHTML = '<tr><td colspan="9" class="empty">' +
       (state.jobs.length ? 'No jobs match this filter.' : 'No jobs on this node yet.') +
       '</td></tr>';
     return;
@@ -150,6 +153,7 @@ function renderTable() {
       <td>${badge(j)}${j.failed_stage ? `<span class="sub-note">${esc(j.failed_stage)}</span>` : ''}</td>
       <td>${iterCells(j)}</td>
       <td class="num">${j.best_score == null ? '—' : fmtNum(j.best_score)}</td>
+      <td class="small" style="white-space:nowrap">${fmtWhen(j.submitted_at)}</td>
       <td>${fmtElapsed(j.submitted_at, j.completed_at)}</td>
       <td style="text-align:right;white-space:nowrap">
         ${stoppable ? `<button class="btn-sm" data-stop="${esc(j.job_id)}">Stop</button> ` : ''}
@@ -293,7 +297,7 @@ async function refresh() {
   } else {
     const body = document.getElementById('jobsBody');
     if (body) {
-      body.innerHTML = '<tr><td colspan="8" class="empty">Could not load jobs: ' +
+      body.innerHTML = '<tr><td colspan="9" class="empty">Could not load jobs: ' +
         esc(jobsRes && jobsRes.error) + '</td></tr>';
     }
   }

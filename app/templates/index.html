@@ -51,7 +51,13 @@
 
 <div class="shell">
 
-  <aside class="rail">
+  <aside class="rail" id="rail">
+    <button type="button" class="rail-toggle" id="railToggle"
+            aria-expanded="true" aria-controls="rail" title="Collapse the sidebar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.8" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+      <span class="sr-only">Collapse the sidebar</span>
+    </button>
     <div class="rail-brand">
       <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#7FA3FF" stroke-width="1.6" aria-hidden="true">
         <circle cx="7" cy="14" r="3.2"></circle><circle cx="21" cy="8" r="3.2"></circle>
@@ -144,11 +150,12 @@
                   <th scope="col">Status</th>
                   <th scope="col" style="width:160px">Iterations</th>
                   <th scope="col" class="num">Best ΔΔG</th>
+                  <th scope="col">Submitted</th>
                   <th scope="col">Elapsed</th>
                   <th scope="col"><span class="sr-only">Actions</span></th>
                 </tr>
               </thead>
-              <tbody id="jobsBody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+              <tbody id="jobsBody"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
             </table>
           </div>
         </section>
@@ -460,6 +467,10 @@
               <span class="small mono muted" id="viewerPdb">—</span>
             </div>
             <div class="viewer viewer-small" id="resultViewer"></div>
+            <div class="viewer-grip" id="resultViewerGrip" role="separator"
+                 aria-orientation="horizontal" tabindex="0"
+                 aria-label="Resize the structure viewer height"
+                 title="Drag to make the structure taller · double-click to reset · arrow keys to nudge"></div>
             <div class="card-pad" style="display:flex;gap:6px;flex-wrap:wrap" id="viewerControls">
               <button class="btn-sm" data-rep="cartoon" aria-pressed="true">Cartoon</button>
               <button class="btn-sm" data-rep="surface" aria-pressed="false">Surface</button>

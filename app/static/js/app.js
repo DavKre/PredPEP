@@ -4,6 +4,7 @@
 // which is visible. Each module exposes init/show/hide so polling only runs for
 // the view on screen.
 
+import { makeRailCollapsible } from './resizable.js';
 import * as ops from './ops.js';
 import * as submit from './submit.js';
 import * as results from './results.js';
@@ -97,6 +98,8 @@ const ctx = {
 };
 
 function boot() {
+  // The rail collapses to an icon strip; the choice is remembered per browser.
+  makeRailCollapsible({ railId: 'rail', toggleId: 'railToggle' });
   for (const v of Object.values(VIEWS)) {
     if (v.mod.init) {
       try { v.mod.init(ctx); } catch (e) { console.error('[init]', e); }

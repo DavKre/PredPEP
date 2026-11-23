@@ -580,6 +580,7 @@ export function init() {
     splitId: 'resultsSplit',
     handleId: 'resultsSplitHandle',
     viewerId: 'resultViewer',
+    gripId: 'resultViewerGrip',
     onResize: () => state.viewer && state.viewer.resize(),
   });
   renderHead();

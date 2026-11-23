@@ -924,10 +924,72 @@ a:hover { color: var(--accent-ink); }
 .split-handle:hover, .split-handle:active { opacity: 1; background: var(--accent, var(--ink-3)); }
 .split-handle:focus-visible { outline: 2px solid var(--accent, var(--ink-2)); outline-offset: 2px; opacity: 1; }
 
-/* The 3D canvas is short in this view; let it be pulled taller. The grip is
-   the browser's own, so it costs nothing and behaves the way people expect.
-   results.js watches the element and tells NGL to re-fit its canvas. */
-.viewer { resize: vertical; overflow: hidden; min-height: 180px; }
+/* Height of the structure viewer -------------------------------------------
+   `resize: vertical` was tried here first and is useless: NGL fills the box
+   with its own canvas, which paints over the browser's resize corner, so the
+   grip cannot be seen or grabbed. An explicit bar under the canvas is also
+   more discoverable than a 16px corner nobody looks for. */
+.viewer { overflow: hidden; min-height: 180px; }
+
+.viewer-grip {
+  height: 9px; cursor: row-resize; position: relative;
+  background: var(--card); border-top: 1px solid var(--line-soft);
+  touch-action: none;
+}
+.viewer-grip::after {                     /* a visible thumb, centred */
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 34px; height: 3px; margin: -1.5px 0 0 -17px;
+  border-radius: 2px; background: var(--line);
+  transition: background .12s ease, width .12s ease;
+}
+.viewer-grip:hover::after, .viewer-grip:active::after {
+  background: var(--accent, var(--ink-3)); width: 54px; margin-left: -27px;
+}
+.viewer-grip:focus-visible { outline: 2px solid var(--accent, var(--ink-2)); outline-offset: 1px; }
+
+/* Collapsing the nav rail ---------------------------------------------------
+   To an icon strip, not to nothing: navigation that disappears entirely is
+   hard to get back. The width is the same variable the open rail uses, so
+   .main reflows on its own with no JS measuring anything. */
+.rail { position: relative; transition: flex-basis .14s ease; }
+.rail-toggle {
+  position: absolute; top: 14px; right: 8px; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0;
+  background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm);
+  color: var(--ink-rail-dim); cursor: pointer;
+}
+.rail-toggle:hover { background: var(--rail-hover); color: #fff; }
+.rail-toggle svg { transition: transform .14s ease; }
+
+.rail--collapsed { flex-basis: 62px; padding-left: 8px; padding-right: 8px; }
+.rail--collapsed .rail-brand div,
+.rail--collapsed .rail-nav a span:not(.sr-only),
+.rail--collapsed .rail-foot .ver,
+.rail--collapsed .rail-foot #nodeName,
+.rail--collapsed .theme-pick__label { display: none; }
+.rail--collapsed .rail-brand { justify-content: center; padding: 0; margin-top: 26px; }
+.rail--collapsed .rail-nav a { justify-content: center; padding: 0; gap: 0; }
+.rail--collapsed .rail-foot { padding: 9px 4px; align-items: center; }
+.rail--collapsed .theme-pick__row { flex-wrap: wrap; justify-content: center; }
+.rail--collapsed .rail-toggle { right: 50%; margin-right: -12px; }
+.rail--collapsed .rail-toggle svg { transform: rotate(180deg); }
+
+/* The label text is the accessible name of each nav item, so it cannot simply
+   be display:none -- it is moved off-screen instead, and the title attribute
+   set by main.js gives a hover tooltip in its place. */
+.rail--collapsed .rail-nav a { position: relative; }
+
+@media (max-width: 900px) {
+  /* The rail is already a full-width band here; collapsing it would hide the
+     navigation outright rather than narrow it. */
+  .rail-toggle { display: none; }
+  .rail--collapsed { flex-basis: var(--rail-w); padding-left: 14px; padding-right: 14px; }
+  .rail--collapsed .rail-brand div,
+  .rail--collapsed .rail-nav a span:not(.sr-only),
+  .rail--collapsed .rail-foot .ver,
+  .rail--collapsed .theme-pick__label { display: revert; }
+}
 
 @media (max-width: 900px) {
   .split-handle { display: none; }

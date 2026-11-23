@@ -13,7 +13,11 @@ wired from `results.js` in two lines so upstream's file barely diverges.
 
 ---
 
-## Add a date column to the Operations table
+## ~~Add a date column to the Operations table~~ — DONE 23 Nov 2026
+
+**Done.** `Submitted` sits between Best ΔΔG and Elapsed, formatted with the
+`fmtWhen` that was already in `api.js` and already imported here, and added to
+the search haystack so the box finds what the column shows.
 
 **What:** the ops jobs table shows Job · Owner · Cores·len · Status · Iterations ·
 Best ΔΔG · Elapsed. No date. v1.4.0's Jobs tab had both **Date** and
@@ -32,7 +36,11 @@ time (`toLocaleString`) as the old Jobs tab did; the API speaks UTC.
 
 ---
 
-## Make the left rail collapsible
+## ~~Make the left rail collapsible~~ — DONE 23 Nov 2026
+
+**Done.** Chevron at the top of the rail, collapses to a 62px icon strip,
+remembered per browser, off below 900px where the rail is already a band. Link
+text moves to `title` so the icons keep their names.
 
 **What:** the nav rail is always open. On a laptop it costs width that the
 Results split and the analytics figures could use.
